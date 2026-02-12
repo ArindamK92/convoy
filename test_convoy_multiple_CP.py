@@ -1,46 +1,46 @@
 """
 Run:
-myenv/bin/python test_vrptw_v2.py
-myenv/bin/python test_vrptw_v2.py
+python test_convoy_multiple_CP.py
+python test_convoy_multiple_CP.py
 
 Print solution paths:
-myenv/bin/python test_vrptw_v2.py --print-solution
+python test_convoy_multiple_CP.py --print-solution
 
 Check solution quality using Fixed-set evaluation callback:
-myenv/bin/python test_vrptw_v2.py --epochs 100 --fixed-eval-every 5 --fixed-eval-size 1000
+python test_convoy_multiple_CP.py --epochs 100 --fixed-eval-every 5 --fixed-eval-size 1000
 
 
 Test using real data (.csv):
 Training: synthetic/generated instances
 Validation/fixed-eval during training: synthetic/generated instances
-myenv/bin/python test_vrptw_v2.py --test-csv vrptw_data.csv --csv-vehicle-capacity 30
+python test_convoy_multiple_CP.py --test-csv vrptw_data.csv --csv-vehicle-capacity 30
 
 Distance computation options:
-myenv/bin/python test_vrptw_v2.py --distance-mode euclidean
-myenv/bin/python test_vrptw_v2.py --distance-mode linear_sum
-myenv/bin/python test_vrptw_v2.py --distance-mode manhattan --test-csv vrptw_data.csv  --print-solution
+python test_convoy_multiple_CP.py --distance-mode euclidean
+python test_convoy_multiple_CP.py --distance-mode linear_sum
+python test_convoy_multiple_CP.py --distance-mode manhattan --test-csv vrptw_data.csv  --print-solution
 
 Train by sampling from a 200-customer CSV pool (30 per instance):
-myenv/bin/python test_vrptw_v2.py --train-pool-csv vrptw_pool_200.csv --pool-sample-size 30
+python test_convoy_multiple_CP.py --train-pool-csv vrptw_pool_200.csv --pool-sample-size 30
 
 Use external distance matrix CSV with the sampled customer pool:
-myenv/bin/python test_vrptw_v2.py --train-pool-csv vrptw_pool_200.csv --pool-sample-size 30 --distance-matrix-csv dist_200x200.csv
+python test_convoy_multiple_CP.py --train-pool-csv vrptw_pool_200.csv --pool-sample-size 30 --distance-matrix-csv dist_200x200.csv
 
 Train using input csv:
-myenv/bin/python test_vrptw_v2.py \
+python test_convoy_multiple_CP.py \
   --train-pool-csv vrptw_pool_200.csv \
   --pool-sample-size 30 \
   --epochs 100  --test-csv vrptw_data.csv  --print-solution
 
 
 Use distance from input csv:
-myenv/bin/python test_vrptw_v2.py \
+python test_convoy_multiple_CP.py \
   --train-pool-csv vrptw_pool_200.csv \
   --pool-sample-size 30 \
   --distance-matrix-csv dist_201x201.csv  --test-csv vrptw_data.csv  --print-solution
 
 Use distance for test data also:
-myenv/bin/python test_vrptw_v2.py \
+python test_convoy_multiple_CP.py \
   --train-pool-csv vrptw_pool_200.csv \
   --pool-sample-size 30 \
   --distance-matrix-csv dist_201x201.csv \
@@ -49,7 +49,7 @@ myenv/bin/python test_vrptw_v2.py \
   --print-solution
 
 Use time to travel from input csv:
-myenv/bin/python test_vrptw_v2.py \
+python test_convoy_multiple_CP.py \
   --train-pool-csv vrptw_pool_200.csv \
   --pool-sample-size 30 \
   --distance-matrix-csv dist_201x201.csv \
@@ -60,10 +60,26 @@ myenv/bin/python test_vrptw_v2.py \
   --print-solution
 
 
+Use custom CP   
+python3 test_convoy_multiple_CP.py \
+  --train-pool-csv vrptw_pool_200.csv \
+  --distance-matrix-csv dist_201x201.csv \
+  --time-matrix-csv time_201x201.csv \
+  --test-csv vrptw_data.csv \
+  --test-distance-matrix-csv dist_201x201.csv \
+  --test-time-matrix-csv time_201x201.csv \
+  --charging-pool-csv CP_details.csv \
+  --charging-pool-sample-size 10 \
+  --ev-num-vehicles 5 \
+  --print-solution
+
+
+
 """
 
 import argparse
 import csv
+import os
 
 import lightning as L
 import torch
@@ -89,10 +105,66 @@ class CVRPTWCustomDistanceEnv(CVRPTWEnv):
         - `linear_sum`: (x1-x2) + (y1-y2)
     """
 
-    def __init__(self, distance_mode: str = "euclidean", **kwargs):
-        """Initialize the environment and select the distance metric variant."""
+    def __init__(
+        self,
+        distance_mode: str = "euclidean",
+        battery_capacity_kwh: float = 60.0,
+        energy_rate_kwh_per_distance: float = 0.5,
+        charge_rate_kwh_per_hour: float = 120.0,
+        reserve_soc_kwh: float = 0.0,
+        num_evs: int = 1,
+        charging_pool_csv: str | None = "CP_details.csv",
+        charging_pool_sample_size: int = 5,
+        **kwargs,
+    ):
+        """Initialize distance mode, EV parameters, and charging-station pool."""
         super().__init__(**kwargs)
+        if battery_capacity_kwh <= 0:
+            raise ValueError("battery_capacity_kwh must be > 0.")
+        if energy_rate_kwh_per_distance <= 0:
+            raise ValueError("energy_rate_kwh_per_distance must be > 0.")
+        if charge_rate_kwh_per_hour <= 0:
+            raise ValueError("charge_rate_kwh_per_hour must be > 0.")
+        if reserve_soc_kwh < 0:
+            raise ValueError("reserve_soc_kwh must be >= 0.")
+        if num_evs <= 0:
+            raise ValueError("num_evs must be > 0.")
+        if charging_pool_sample_size < 0:
+            raise ValueError("charging_pool_sample_size must be >= 0.")
         self.distance_mode = distance_mode
+        self.battery_capacity_kwh = float(battery_capacity_kwh)
+        self.energy_rate_kwh_per_distance = float(energy_rate_kwh_per_distance)
+        self.charge_rate_kwh_per_hour = float(charge_rate_kwh_per_hour)
+        self.reserve_soc_kwh = float(reserve_soc_kwh)
+        self.num_evs = int(num_evs)
+        self.charging_pool_sample_size = int(charging_pool_sample_size)
+        self.charging_pool_csv = charging_pool_csv
+        # Script time values (TW, service, travel) are treated as minutes.
+        self.time_units_per_hour = 60.0
+        self.cp_pool_locs: torch.Tensor | None = None
+        self.cp_pool_rates: torch.Tensor | None = None
+        self.cp_pool_ids: torch.Tensor | None = None
+
+        # Load charging-point pool once; each reset samples a subset per instance.
+        if self.charging_pool_sample_size > 0:
+            if not self.charging_pool_csv or not os.path.exists(self.charging_pool_csv):
+                raise ValueError(
+                    "Charging pool CSV not found. Set --charging-pool-csv or "
+                    "set --charging-pool-sample-size 0."
+                )
+            cp_rows = parse_charging_station_csv_rows(self.charging_pool_csv)
+            if self.charging_pool_sample_size > len(cp_rows):
+                raise ValueError(
+                    f"--charging-pool-sample-size={self.charging_pool_sample_size} "
+                    f"is larger than available charging points ({len(cp_rows)})."
+                )
+            self.cp_pool_locs = torch.tensor(
+                [[r["x"], r["y"]] for r in cp_rows], dtype=torch.float32
+            )
+            self.cp_pool_rates = torch.tensor(
+                [r["charge_rate_kwh_per_hour"] for r in cp_rows], dtype=torch.float32
+            )
+            self.cp_pool_ids = torch.tensor([r["cp_id"] for r in cp_rows], dtype=torch.long)
 
     @staticmethod
     def _distance(a: torch.Tensor, b: torch.Tensor, mode: str) -> torch.Tensor:
@@ -107,49 +179,315 @@ class CVRPTWCustomDistanceEnv(CVRPTWEnv):
             return dx + dy
         raise ValueError(f"Unknown distance mode: {mode}")
 
+    def _build_pairwise_distance_matrix(self, td: TensorDict) -> torch.Tensor:
+        """Return an all-node pairwise distance matrix for energy calculations."""
+        if "dist_matrix" in td.keys():
+            return td["dist_matrix"]
+        return self._distance(
+            td["locs"][:, :, None, :], td["locs"][:, None, :, :], self.distance_mode
+        )
+
+    def _augment_instance_with_charging_stations(self, td: TensorDict) -> TensorDict:
+        """Append sampled charging stations and related metadata to one batch."""
+        batch_size = td["locs"].shape[0]
+        device = td["locs"].device
+        num_customers = td["locs"].shape[1]
+
+        # Start with depot-only charging metadata (works even when stations are disabled).
+        charge_nodes_mask = torch.zeros(
+            (batch_size, 1 + num_customers), dtype=torch.bool, device=device
+        )
+        charge_nodes_mask[:, 0] = True
+        station_mask = torch.zeros_like(charge_nodes_mask)
+        charge_rate_per_node = torch.zeros(
+            (batch_size, 1 + num_customers), dtype=torch.float32, device=device
+        )
+        charge_rate_per_node[:, 0] = self.charge_rate_kwh_per_hour
+
+        if (
+            self.charging_pool_sample_size <= 0
+            or self.cp_pool_locs is None
+            or self.cp_pool_rates is None
+            or self.cp_pool_ids is None
+        ):
+            td.set("charge_nodes_mask", charge_nodes_mask)
+            td.set("station_mask", station_mask)
+            td.set("charge_rate_per_node", charge_rate_per_node)
+            return td
+
+        # Sample charging stations per instance from CP_details.csv pool.
+        sample_idx = torch.stack(
+            [
+                torch.randperm(self.cp_pool_locs.shape[0])[: self.charging_pool_sample_size]
+                for _ in range(batch_size)
+            ],
+            dim=0,
+        )
+        sampled_station_locs = self.cp_pool_locs[sample_idx].to(device)
+        sampled_station_rates = self.cp_pool_rates[sample_idx].to(device)
+        sampled_station_ids = self.cp_pool_ids[sample_idx].to(device)
+
+        locs_aug = torch.cat([td["locs"], sampled_station_locs], dim=1)
+        zero_demand = torch.zeros(
+            (batch_size, self.charging_pool_sample_size),
+            dtype=td["demand"].dtype,
+            device=device,
+        )
+        demand_aug = torch.cat([td["demand"], zero_demand], dim=1)
+
+        # Station stop duration is computed dynamically from SOC and charging power.
+        zero_duration = torch.zeros(
+            (batch_size, self.charging_pool_sample_size),
+            dtype=td["durations"].dtype,
+            device=device,
+        )
+        durations_aug = torch.cat([td["durations"], zero_duration], dim=1)
+
+        # Stations are always open over the instance planning horizon.
+        station_tw = torch.zeros(
+            (batch_size, self.charging_pool_sample_size, 2),
+            dtype=td["time_windows"].dtype,
+            device=device,
+        )
+        max_tw_end = td["time_windows"][..., 1].amax(dim=1, keepdim=True)
+        station_tw[..., 1] = max_tw_end.expand(-1, self.charging_pool_sample_size)
+        time_windows_aug = torch.cat([td["time_windows"], station_tw], dim=1)
+
+        td.set("locs", locs_aug)
+        td.set("demand", demand_aug)
+        td.set("durations", durations_aug)
+        td.set("time_windows", time_windows_aug)
+
+        # Build metadata masks aligned to [depot + customers + stations].
+        total_nodes = 1 + num_customers + self.charging_pool_sample_size
+        station_mask = torch.zeros((batch_size, total_nodes), dtype=torch.bool, device=device)
+        station_start = 1 + num_customers
+        station_mask[:, station_start:] = True
+
+        charge_nodes_mask = station_mask.clone()
+        charge_nodes_mask[:, 0] = True
+
+        charge_rate_per_node = torch.zeros(
+            (batch_size, total_nodes), dtype=torch.float32, device=device
+        )
+        charge_rate_per_node[:, 0] = self.charge_rate_kwh_per_hour
+        charge_rate_per_node[:, station_start:] = sampled_station_rates
+        cp_id_per_node = torch.full(
+            (batch_size, total_nodes), -1, dtype=torch.long, device=device
+        )
+        cp_id_per_node[:, station_start:] = sampled_station_ids
+
+        td.set("charge_nodes_mask", charge_nodes_mask)
+        td.set("station_mask", station_mask)
+        td.set("charge_rate_per_node", charge_rate_per_node)
+        td.set("cp_id_per_node", cp_id_per_node)
+
+        # Extend optional matrices so stations can be selected as valid nodes.
+        if "dist_matrix" in td.keys() or "travel_time_matrix" in td.keys():
+            all_nodes = torch.cat([td["depot"][:, None, :], td["locs"]], dim=1)
+            geo = self._distance(
+                all_nodes[:, :, None, :], all_nodes[:, None, :, :], self.distance_mode
+            )
+            if "dist_matrix" in td.keys():
+                old_d = td["dist_matrix"]
+                old_n = old_d.shape[-1]
+                new_d = geo.clone()
+                new_d[:, :old_n, :old_n] = old_d
+                td.set("dist_matrix", new_d)
+            if "travel_time_matrix" in td.keys():
+                old_t = td["travel_time_matrix"]
+                old_n = old_t.shape[-1]
+                new_t = geo.clone()
+                new_t[:, :old_n, :old_n] = old_t
+                td.set("travel_time_matrix", new_t)
+        return td
+
     def get_action_mask(self, td):
-        """Build feasibility mask from capacity/visit rules and time-window reachability."""
+        """Build feasibility mask with time-window + EV + charging-station constraints."""
         not_masked = CVRPEnv.get_action_mask(td)
+        if "station_mask" in td.keys():
+            # Charging stations are revisitable, so ignore CVRP visited masking for them.
+            # Keep the current node masked to avoid zero-distance self-loop actions.
+            station_candidates = td["station_mask"].clone()
+            same_node = torch.zeros_like(station_candidates, dtype=torch.bool)
+            same_node.scatter_(1, td["current_node"], True)
+            station_candidates = station_candidates & ~same_node
+            if "done" in td.keys():
+                done = td["done"]
+                if done.dim() == 1:
+                    done = done.unsqueeze(-1)
+                station_candidates = station_candidates & (~done.expand_as(station_candidates))
+            not_masked = torch.where(
+                station_candidates,
+                torch.ones_like(not_masked, dtype=torch.bool),
+                not_masked,
+            )
+
         current_loc = gather_by_index(td["locs"], td["current_node"])
         if "travel_time_matrix" in td.keys():
             time_row = gather_by_index(td["travel_time_matrix"], td["current_node"], dim=1)
-            travel_time = time_row.squeeze(1)
-        elif "dist_matrix" in td.keys():
-            time_row = gather_by_index(td["dist_matrix"], td["current_node"], dim=1)
             travel_time = time_row.squeeze(1)
         else:
             travel_time = self._distance(
                 current_loc[..., None, :], td["locs"], self.distance_mode
             )
-        if "dist_matrix" in td.keys():
-            row = gather_by_index(td["dist_matrix"], td["current_node"], dim=1)
-            dist = row.squeeze(1)
-        else:
-            dist = self._distance(current_loc[..., None, :], td["locs"], self.distance_mode)
+        pairwise_dist = self._build_pairwise_distance_matrix(td)
+        row = gather_by_index(pairwise_dist, td["current_node"], dim=1)
+        dist = row.squeeze(1)
         td.update(
             {"current_loc": current_loc, "distances": dist, "travel_times": travel_time}
         )
         can_reach_in_time = td["current_time"] + travel_time <= td["time_windows"][..., 1]
-        mask = not_masked & can_reach_in_time
+
+        if "charge_nodes_mask" in td.keys():
+            charge_nodes_mask = td["charge_nodes_mask"]
+        else:
+            charge_nodes_mask = torch.zeros_like(dist, dtype=torch.bool)
+            charge_nodes_mask[..., 0] = True
+        if "station_mask" in td.keys():
+            station_mask = td["station_mask"]
+        else:
+            station_mask = torch.zeros_like(dist, dtype=torch.bool)
+        nearest_charge_dist = torch.where(
+            charge_nodes_mask[:, None, :],
+            pairwise_dist,
+            torch.full_like(pairwise_dist, float("inf")),
+        ).min(dim=-1).values
+        # Customer move is feasible only if after serving that customer,
+        # the EV can still reach any charging node (depot or station).
+        energy_to_node = dist * self.energy_rate_kwh_per_distance
+        energy_for_customer = (
+            dist + nearest_charge_dist
+        ) * self.energy_rate_kwh_per_distance
+        customer_mask = ~charge_nodes_mask
+        required_energy = torch.where(customer_mask, energy_for_customer, energy_to_node)
+        battery_ok = td["current_battery"] >= (required_energy + self.reserve_soc_kwh)
+
+        mask = not_masked & can_reach_in_time & battery_ok
         # Keep decoding robust when custom distances make all TW actions infeasible.
         fallback = ~mask.any(dim=-1, keepdim=True)
-        return torch.where(fallback, not_masked, mask)
+        relaxed_mask = not_masked & battery_ok
+        mask = torch.where(fallback, relaxed_mask, mask)
+
+        # If at least one customer is feasible now, force serving a customer.
+        # This prevents infinite charge-node bouncing when stations are revisitable.
+        customer_nodes_mask = ~station_mask
+        customer_nodes_mask[:, 0] = False
+        customer_feasible = mask & customer_nodes_mask
+        has_customer_option = customer_feasible.any(dim=-1, keepdim=True)
+        mask = torch.where(has_customer_option, customer_feasible, mask)
+
+        # If all customers are already served, force return to depot to terminate route.
+        unserved_customers = customer_nodes_mask & (~td["visited"].to(torch.bool))
+        has_unserved = unserved_customers.any(dim=-1, keepdim=True)
+        depot_only = torch.zeros_like(mask, dtype=torch.bool)
+        depot_only[:, 0] = True
+        mask = torch.where(has_unserved, mask, depot_only)
+
+        # Final safety: ensure at least one feasible action exists.
+        needs_fallback = ~mask.any(dim=-1, keepdim=True)
+        return torch.where(needs_fallback, depot_only, mask)
 
     def _step(self, td):
-        """Advance one environment transition and refresh action feasibility mask."""
+        """Advance transition, update EV SOC/charging state, then refresh mask."""
         batch_size = td["locs"].shape[0]
+        device = td["locs"].device
         travel_time = gather_by_index(td["travel_times"], td["action"]).reshape(
+            [batch_size, 1]
+        )
+        travel_distance = gather_by_index(td["distances"], td["action"]).reshape(
             [batch_size, 1]
         )
         duration = gather_by_index(td["durations"], td["action"]).reshape([batch_size, 1])
         start_times = gather_by_index(td["time_windows"], td["action"])[..., 0].reshape(
             [batch_size, 1]
         )
-        td["current_time"] = (td["action"][:, None] != 0) * (
-            torch.max(td["current_time"] + travel_time, start_times) + duration
+        arrival_or_wait = torch.max(td["current_time"] + travel_time, start_times)
+        energy_used = travel_distance * self.energy_rate_kwh_per_distance
+        remaining_battery = torch.clamp(td["current_battery"] - energy_used, min=0.0)
+
+        if "charge_nodes_mask" in td.keys():
+            at_charge_node = gather_by_index(
+                td["charge_nodes_mask"].to(torch.float32), td["action"]
+            ).reshape([batch_size, 1]) > 0.5
+            at_station = gather_by_index(
+                td["station_mask"].to(torch.float32), td["action"]
+            ).reshape([batch_size, 1]) > 0.5
+            selected_charge_rate = gather_by_index(
+                td["charge_rate_per_node"], td["action"]
+            ).reshape([batch_size, 1])
+        else:
+            at_charge_node = td["action"][:, None] == 0
+            at_station = torch.zeros_like(at_charge_node)
+            selected_charge_rate = torch.full_like(
+                remaining_battery, self.charge_rate_kwh_per_hour
+            )
+        charge_needed = torch.clamp(self.battery_capacity_kwh - remaining_battery, min=0.0)
+        charge_time = torch.zeros_like(remaining_battery)
+        if at_charge_node.any():
+            safe_charge_rate = torch.clamp(selected_charge_rate, min=1e-6)
+            charge_time = torch.where(
+                at_charge_node,
+                (charge_needed / safe_charge_rate) * self.time_units_per_hour,
+                charge_time,
+            )
+        # For depot/station visits, service time is replaced by charge-to-full time.
+        finish_time = arrival_or_wait + torch.where(at_charge_node, charge_time, duration)
+
+        at_depot = td["action"][:, None] == 0
+
+        vehicle_ready_time = td["ev_vehicle_ready_time"].clone()
+        current_vehicle_idx = td["current_vehicle_idx"]
+        batch_idx = torch.arange(batch_size, device=device)
+        active_idx = current_vehicle_idx.squeeze(-1)
+        active_ready = vehicle_ready_time[batch_idx, active_idx].unsqueeze(-1)
+        # Depot has a shared fleet: after returning + charging this EV, pick earliest-ready EV.
+        active_ready = torch.where(at_depot, finish_time, active_ready)
+        vehicle_ready_time[batch_idx, active_idx] = active_ready.squeeze(-1)
+
+        next_ready_time, next_vehicle_idx = vehicle_ready_time.min(dim=1)
+        full_battery = torch.full(
+            (batch_size, 1),
+            self.battery_capacity_kwh,
+            dtype=remaining_battery.dtype,
+            device=device,
         )
+        battery_non_depot = torch.where(at_station, full_battery, remaining_battery)
+
+        td["current_time"] = torch.where(
+            at_depot, next_ready_time.unsqueeze(-1), finish_time
+        )
+        td["current_battery"] = torch.where(at_depot, full_battery, battery_non_depot)
+        td["current_vehicle_idx"] = torch.where(
+            at_depot, next_vehicle_idx.unsqueeze(-1), current_vehicle_idx
+        )
+        td["ev_vehicle_ready_time"] = vehicle_ready_time
         td = super(CVRPTWEnv, self)._step(td)
-        td.set("action_mask", self.get_action_mask(td))
+        action_mask = self.get_action_mask(td)
+
+        if "station_mask" in td.keys() and "charge_nodes_mask" in td.keys():
+            station_mask = td["station_mask"]
+            charge_nodes_mask = td["charge_nodes_mask"]
+            customer_nodes_mask = ~station_mask
+            customer_nodes_mask[:, 0] = False
+            unserved_customers = customer_nodes_mask & (~td["visited"].to(torch.bool))
+            has_unserved = unserved_customers.any(dim=-1)
+            feasible_customer_now = (action_mask & customer_nodes_mask).any(dim=-1)
+            at_charge_node_now = gather_by_index(
+                charge_nodes_mask.to(torch.float32), td["current_node"]
+            ).squeeze(-1) > 0.5
+            full_battery_now = td["current_battery"].squeeze(-1) >= (
+                self.battery_capacity_kwh - 1e-6
+            )
+            # Dead-end guard: at a charge node with full SOC but no customer is feasible.
+            dead_end = has_unserved & (~feasible_customer_now) & at_charge_node_now & full_battery_now
+            if dead_end.any():
+                td["done"] = td["done"] | dead_end
+                depot_only = torch.zeros_like(action_mask, dtype=torch.bool)
+                depot_only[:, 0] = True
+                action_mask = torch.where(dead_end[:, None], depot_only, action_mask)
+
+        td.set("action_mask", action_mask)
         return td
 
     def _get_reward(self, td, actions):
@@ -180,6 +518,8 @@ class CVRPTWCustomDistanceEnv(CVRPTWEnv):
 
     def _reset(self, td=None, batch_size=None):
         """Initialize the rollout state TensorDict for a new episode."""
+        # Add sampled charging stations (if configured) before RL state construction.
+        td = self._augment_instance_with_charging_stations(td)
         device = td.device
         td_reset = TensorDict(
             {
@@ -190,6 +530,20 @@ class CVRPTWCustomDistanceEnv(CVRPTWEnv):
                 ),
                 "current_time": torch.zeros(
                     *batch_size, 1, dtype=torch.float32, device=device
+                ),
+                "current_battery": torch.full(
+                    (*batch_size, 1),
+                    self.battery_capacity_kwh,
+                    dtype=torch.float32,
+                    device=device,
+                ),
+                "current_vehicle_idx": torch.zeros(
+                    *batch_size, 1, dtype=torch.long, device=device
+                ),
+                "ev_vehicle_ready_time": torch.zeros(
+                    (*batch_size, self.num_evs),
+                    dtype=torch.float32,
+                    device=device,
                 ),
                 "used_capacity": torch.zeros((*batch_size, 1), device=device),
                 "vehicle_capacity": torch.full(
@@ -209,6 +563,18 @@ class CVRPTWCustomDistanceEnv(CVRPTWEnv):
             td_reset.set("dist_matrix", td["dist_matrix"])
         if "travel_time_matrix" in td.keys():
             td_reset.set("travel_time_matrix", td["travel_time_matrix"])
+        if "station_mask" in td.keys():
+            td_reset.set("station_mask", td["station_mask"])
+            # Mark stations as already visited so CVRP completion still depends on customers.
+            td_reset["visited"] = torch.maximum(
+                td_reset["visited"], td["station_mask"].to(td_reset["visited"].dtype)
+            )
+        if "charge_nodes_mask" in td.keys():
+            td_reset.set("charge_nodes_mask", td["charge_nodes_mask"])
+        if "charge_rate_per_node" in td.keys():
+            td_reset.set("charge_rate_per_node", td["charge_rate_per_node"])
+        if "cp_id_per_node" in td.keys():
+            td_reset.set("cp_id_per_node", td["cp_id_per_node"])
         td_reset.set("action_mask", self.get_action_mask(td_reset))
         return td_reset
 
@@ -285,6 +651,54 @@ def parse_distance_matrix_csv(matrix_csv_path: str) -> torch.Tensor:
     if len(rows) != n:
         raise ValueError("Distance matrix CSV must be square.")
     return torch.tensor(rows, dtype=torch.float32)
+
+
+def parse_charging_station_csv_rows(csv_path: str) -> list[dict]:
+    """Parse charging-point rows with x/y coordinates and charging rate."""
+    stations: list[dict] = []
+    with open(csv_path, "r", encoding="utf-8") as f:
+        reader = csv.DictReader(f)
+        if reader.fieldnames is None:
+            raise ValueError(
+                "Charging station CSV must contain headers including x, y and charge rate."
+            )
+        fieldnames = set(reader.fieldnames)
+        if "x" not in fieldnames or "y" not in fieldnames:
+            raise ValueError("Charging station CSV must contain columns: x,y,<charge_rate>.")
+        rate_col = None
+        for candidate in (
+            "charge_rate_kwh_per_hour",
+            "charge_rate",
+            "charging_rate_kwh_per_hour",
+            "charging_rate",
+        ):
+            if candidate in fieldnames:
+                rate_col = candidate
+                break
+        if rate_col is None:
+            raise ValueError(
+                "Charging station CSV must include one rate column: "
+                "charge_rate_kwh_per_hour/charge_rate/charging_rate_kwh_per_hour/charging_rate."
+            )
+        for i, row in enumerate(reader, start=1):
+            cp_id = i
+            if "cp_id" in row and row["cp_id"] != "":
+                try:
+                    cp_id = int(row["cp_id"])
+                except ValueError:
+                    cp_id = i
+            rec = {
+                "cp_id": cp_id,
+                "x": float(row["x"]),
+                "y": float(row["y"]),
+                "charge_rate_kwh_per_hour": float(row[rate_col]),
+            }
+            if rec["charge_rate_kwh_per_hour"] <= 0:
+                raise ValueError("Charging station rate must be > 0 for every row.")
+            stations.append(rec)
+    if not stations:
+        raise ValueError("Charging station CSV is empty.")
+    return stations
 
 
 class CSVCustomerPoolGenerator(CVRPTWGenerator):
@@ -525,6 +939,21 @@ def parse_args() -> argparse.Namespace:
             "euclidean" -> sqrt((x1-x2)^2 + (y1-y2)^2)
             "manhattan" -> abs(x1-x2) + abs(y1-y2)
             "linear_sum" -> (x1-x2) + (y1-y2)
+        --ev-battery-capacity-kwh (float, default=60.0):
+            Full battery capacity (kWh) for each EV.
+        --ev-energy-rate-kwh-per-distance (float, default=0.5):
+            Energy usage per distance unit traveled.
+        --ev-charge-rate-kwh-per-hour (float, default=120.0):
+            Depot charging rate. Charging time is converted to minutes.
+        --ev-reserve-soc-kwh (float, default=0.0):
+            Minimum reserve state-of-charge required after feasibility checks.
+        --ev-num-vehicles (int, default=1):
+            Number of EVs in fleet (all start full at time 0).
+        --charging-pool-csv (str, default="CP_details.csv"):
+            Charging-station pool CSV path. Expected columns:
+            x,y,charge_rate_kwh_per_hour (or charge_rate).
+        --charging-pool-sample-size (int, default=5):
+            Number of charging stations sampled per instance from the pool CSV.
         --train-pool-csv (str, default=None):
             Optional CSV pool (e.g. 200 customers + 1 depot) used to generate
             train/val/test instances by random customer subsampling.
@@ -638,6 +1067,48 @@ def parse_args() -> argparse.Namespace:
         help="Distance function for travel time and reward.",
     )
     parser.add_argument(
+        "--ev-battery-capacity-kwh",
+        type=float,
+        default=60.0,
+        help="EV battery capacity in kWh.",
+    )
+    parser.add_argument(
+        "--ev-energy-rate-kwh-per-distance",
+        type=float,
+        default=0.5,
+        help="Energy use per distance unit (kWh / distance-unit).",
+    )
+    parser.add_argument(
+        "--ev-charge-rate-kwh-per-hour",
+        type=float,
+        default=120.0,
+        help="Charging rate at depot (kWh/hour).",
+    )
+    parser.add_argument(
+        "--ev-reserve-soc-kwh",
+        type=float,
+        default=0.0,
+        help="Reserve SOC that must remain (kWh).",
+    )
+    parser.add_argument(
+        "--ev-num-vehicles",
+        type=int,
+        default=1,
+        help="Number of EVs available in fleet.",
+    )
+    parser.add_argument(
+        "--charging-pool-csv",
+        type=str,
+        default="CP_details.csv",
+        help="Charging station pool CSV (x,y,charge_rate).",
+    )
+    parser.add_argument(
+        "--charging-pool-sample-size",
+        type=int,
+        default=5,
+        help="Number of charging stations sampled per instance.",
+    )
+    parser.add_argument(
         "--train-pool-csv",
         type=str,
         default=None,
@@ -716,6 +1187,128 @@ def split_routes_from_actions(actions_1d: torch.Tensor) -> list[list[int]]:
         routes.append(current_route)
 
     return routes
+
+
+def format_node_label(
+    node: int,
+    station_mask_1d: torch.Tensor | None = None,
+    cp_id_per_node_1d: torch.Tensor | None = None,
+) -> str:
+    """Format node id to distinguish depot/customer/charging-station nodes."""
+    node = int(node)
+    if node == 0:
+        return "DEPOT"
+    if (
+        station_mask_1d is not None
+        and 0 <= node < int(station_mask_1d.shape[0])
+        and bool(station_mask_1d[node].item())
+    ):
+        cp_id = -1
+        if (
+            cp_id_per_node_1d is not None
+            and 0 <= node < int(cp_id_per_node_1d.shape[0])
+        ):
+            cp_id = int(cp_id_per_node_1d[node].item())
+        return f"CP{cp_id}" if cp_id >= 0 else f"CP_NODE_{node}"
+    return f"CUST{node}"
+
+
+def build_customer_visit_trace(
+    env: CVRPTWCustomDistanceEnv,
+    td_state: TensorDict,
+    actions_1d: torch.Tensor,
+) -> list[dict]:
+    """Simulate one decoded solution and collect per-customer time/SOC trace."""
+    all_locs = td_state["locs"][0]
+    if "dist_matrix" in td_state.keys():
+        dist_matrix = td_state["dist_matrix"][0]
+    else:
+        dist_matrix = env._distance(
+            all_locs[:, None, :], all_locs[None, :, :], env.distance_mode
+        )
+    if "travel_time_matrix" in td_state.keys():
+        travel_matrix = td_state["travel_time_matrix"][0]
+    else:
+        travel_matrix = dist_matrix
+
+    durations = td_state["durations"][0]
+    tw_starts = td_state["time_windows"][0, :, 0]
+    if "charge_nodes_mask" in td_state.keys():
+        charge_nodes_mask = td_state["charge_nodes_mask"][0]
+    else:
+        charge_nodes_mask = torch.zeros(dist_matrix.shape[0], dtype=torch.bool)
+        charge_nodes_mask[0] = True
+    if "station_mask" in td_state.keys():
+        station_mask = td_state["station_mask"][0]
+    else:
+        station_mask = torch.zeros_like(charge_nodes_mask)
+    if "charge_rate_per_node" in td_state.keys():
+        charge_rate_per_node = td_state["charge_rate_per_node"][0]
+    else:
+        charge_rate_per_node = torch.zeros(dist_matrix.shape[0], dtype=torch.float32)
+        charge_rate_per_node[0] = env.charge_rate_kwh_per_hour
+
+    battery_cap = float(env.battery_capacity_kwh)
+    energy_rate = float(env.energy_rate_kwh_per_distance)
+    num_evs = int(env.num_evs)
+    time_units_per_hour = float(env.time_units_per_hour)
+
+    current_node = 0
+    current_time = 0.0
+    current_soc = battery_cap
+    current_vehicle_idx = 0
+    vehicle_ready_times = [0.0 for _ in range(num_evs)]
+    trace: list[dict] = []
+
+    for step_idx, node in enumerate(actions_1d.tolist(), start=1):
+        node = int(node)
+        if node < 0 or node >= int(dist_matrix.shape[0]):
+            continue
+
+        travel_dist = float(dist_matrix[current_node, node].item())
+        travel_time = float(travel_matrix[current_node, node].item())
+        arrival_time = current_time + travel_time
+        service_start = max(arrival_time, float(tw_starts[node].item()))
+        soc_after_arrival = max(current_soc - (travel_dist * energy_rate), 0.0)
+
+        is_charge_node = bool(charge_nodes_mask[node].item())
+        is_station = bool(station_mask[node].item())
+        if is_charge_node:
+            selected_rate = max(float(charge_rate_per_node[node].item()), 1e-6)
+            charge_needed = max(battery_cap - soc_after_arrival, 0.0)
+            charge_time = (charge_needed / selected_rate) * time_units_per_hour
+            depart_time = service_start + charge_time
+            soc_after_depart = battery_cap
+        else:
+            depart_time = service_start + float(durations[node].item())
+            soc_after_depart = soc_after_arrival
+
+        if node == 0:
+            vehicle_ready_times[current_vehicle_idx] = depart_time
+            current_vehicle_idx = min(
+                range(num_evs), key=lambda idx: vehicle_ready_times[idx]
+            )
+            current_time = vehicle_ready_times[current_vehicle_idx]
+            current_soc = battery_cap
+            current_node = 0
+            continue
+
+        if not is_station:
+            trace.append(
+                {
+                    "step": step_idx,
+                    "customer_id": node,
+                    "vehicle_id": current_vehicle_idx + 1,
+                    "arrival_time": arrival_time,
+                    "depart_time": depart_time,
+                    "soc_kwh": soc_after_arrival,
+                }
+            )
+        current_time = depart_time
+        current_soc = soc_after_depart
+        current_node = node
+
+    return trace
 
 
 def load_vrptw_instance_from_csv(
@@ -962,16 +1555,43 @@ def print_one_solution_from_instance(
     actions = out["actions"][0].detach().cpu()
     reward = float(out["reward"][0].detach().cpu())
     routes = split_routes_from_actions(actions)
+    station_mask_1d = td["station_mask"][0].detach().cpu() if "station_mask" in td.keys() else None
+    cp_id_per_node_1d = (
+        td["cp_id_per_node"][0].detach().cpu() if "cp_id_per_node" in td.keys() else None
+    )
+    action_labels = [
+        format_node_label(int(node), station_mask_1d, cp_id_per_node_1d)
+        for node in actions.tolist()
+    ]
 
     print(f"\n{title} (greedy decode):")
     print(f"Reward: {reward:.6f}")
     print(f"Flat action sequence: {actions.tolist()}")
+    print(f"Flat action labels:   {action_labels}")
     if not routes:
         print("Vehicle routes: []")
     else:
         print("Vehicle routes:")
         for i, route in enumerate(routes, start=1):
+            labels = [
+                format_node_label(node, station_mask_1d, cp_id_per_node_1d)
+                for node in route
+            ]
             print(f"  Vehicle {i}: {route}")
+            print(f"             {labels}")
+    visit_trace = build_customer_visit_trace(env, td, actions)
+    if visit_trace:
+        print("Customer visit trace (time units are the same as TW/travel-time inputs):")
+        for rec in visit_trace:
+            print(
+                f"  step={rec['step']:>3d} customer={rec['customer_id']:>3d} "
+                f"vehicle={rec['vehicle_id']:>2d} "
+                f"arrival={rec['arrival_time']:.2f} "
+                f"depart={rec['depart_time']:.2f} "
+                f"soc={rec['soc_kwh']:.2f}kWh"
+            )
+    else:
+        print("Customer visit trace: []")
     return reward
 
 
@@ -997,12 +1617,26 @@ def main() -> None:
         )
         env = CVRPTWCustomDistanceEnv(
             distance_mode=args.distance_mode,
+            battery_capacity_kwh=args.ev_battery_capacity_kwh,
+            energy_rate_kwh_per_distance=args.ev_energy_rate_kwh_per_distance,
+            charge_rate_kwh_per_hour=args.ev_charge_rate_kwh_per_hour,
+            reserve_soc_kwh=args.ev_reserve_soc_kwh,
+            num_evs=args.ev_num_vehicles,
+            charging_pool_csv=args.charging_pool_csv,
+            charging_pool_sample_size=args.charging_pool_sample_size,
             check_solution=False,
             generator=pool_generator,
         )
     else:
         env = CVRPTWCustomDistanceEnv(
             distance_mode=args.distance_mode,
+            battery_capacity_kwh=args.ev_battery_capacity_kwh,
+            energy_rate_kwh_per_distance=args.ev_energy_rate_kwh_per_distance,
+            charge_rate_kwh_per_hour=args.ev_charge_rate_kwh_per_hour,
+            reserve_soc_kwh=args.ev_reserve_soc_kwh,
+            num_evs=args.ev_num_vehicles,
+            charging_pool_csv=args.charging_pool_csv,
+            charging_pool_sample_size=args.charging_pool_sample_size,
             check_solution=False,
             generator_params={
                 "num_loc": args.num_loc,
@@ -1083,6 +1717,19 @@ def main() -> None:
     print("Finished training and testing.")
     print(f"Accelerator: {accelerator}")
     print(f"Distance mode: {args.distance_mode}")
+    print(
+        "EV params: "
+        f"battery={args.ev_battery_capacity_kwh}kWh, "
+        f"energy_rate={args.ev_energy_rate_kwh_per_distance}kWh/dist, "
+        f"charge_rate={args.ev_charge_rate_kwh_per_hour}kWh/h, "
+        f"reserve={args.ev_reserve_soc_kwh}kWh, "
+        f"fleet_size={args.ev_num_vehicles}"
+    )
+    print(
+        "Charging pool: "
+        f"csv={args.charging_pool_csv}, "
+        f"sample_size={args.charging_pool_sample_size}"
+    )
     if args.train_pool_csv:
         print(
             "Training pool mode: "
