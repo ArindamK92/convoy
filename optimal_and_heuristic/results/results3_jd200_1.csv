@@ -1,0 +1,3 @@
+Methods,Total delivery,Total CP,Total EV,delivery2ev_ratio,Elapsed time (ms),Total cost,Total successful delivery,Avg. cost per successful delivery
+Optimal,10,2,2,5,86869.79794502258,3.417000000528574,10,0.3417000000528574
+CSA,10,2,2,5,0.0,21.35,9,2.3722222222222222
