@@ -35,45 +35,31 @@ def main() -> None:
     else:
         accelerator = args.accelerator
 
-    if args.train_pool_csv:
-        pool_generator = CSVCustomerPoolGenerator(
-            csv_path=args.train_pool_csv,
-            sample_size=args.pool_sample_size,
-            vehicle_capacity=args.pool_vehicle_capacity,
-            max_time=args.max_time,
-            distance_matrix_csv=args.distance_matrix_csv,
-            time_matrix_csv=args.time_matrix_csv,
-            distance_mode_for_depot=args.distance_mode,
-        )
-        env = convoy(
-            distance_mode=args.distance_mode,
-            battery_capacity_kwh=args.ev_battery_capacity_kwh,
-            energy_rate_kwh_per_distance=args.ev_energy_rate_kwh_per_distance,
-            charge_rate_kwh_per_hour=args.ev_charge_rate_kwh_per_hour,
-            reserve_soc_kwh=args.ev_reserve_soc_kwh,
-            num_evs=args.ev_num_vehicles,
-            charging_pool_csv=args.charging_pool_csv,
-            charging_pool_sample_size=args.charging_pool_sample_size,
-            check_solution=False,
-            generator=pool_generator,
-        )
-    else:
-        env = convoy(
-            distance_mode=args.distance_mode,
-            battery_capacity_kwh=args.ev_battery_capacity_kwh,
-            energy_rate_kwh_per_distance=args.ev_energy_rate_kwh_per_distance,
-            charge_rate_kwh_per_hour=args.ev_charge_rate_kwh_per_hour,
-            reserve_soc_kwh=args.ev_reserve_soc_kwh,
-            num_evs=args.ev_num_vehicles,
-            charging_pool_csv=args.charging_pool_csv,
-            charging_pool_sample_size=args.charging_pool_sample_size,
-            check_solution=False,
-            generator_params={
-                "num_loc": args.num_loc,
-                "max_time": args.max_time,
-                "scale": False,
-            },
-        )
+    pool_csv_path = args.combined_details_csv
+    train_dist_csv = args.combined_dist_matrix_csv
+    train_time_csv = args.combined_time_matrix_csv or args.combined_dist_matrix_csv
+
+    pool_generator = CSVCustomerPoolGenerator(
+        csv_path=pool_csv_path,
+        sample_size=args.pool_sample_size,
+        vehicle_capacity=args.pool_vehicle_capacity,
+        max_time=args.max_time,
+        distance_matrix_csv=train_dist_csv,
+        time_matrix_csv=train_time_csv,
+    )
+    env = convoy(
+        battery_capacity_kwh=args.ev_battery_capacity_kwh,
+        energy_rate_kwh_per_distance=args.ev_energy_rate_kwh_per_distance,
+        charge_rate_kwh_per_hour=args.ev_charge_rate_kwh_per_hour,
+        reserve_soc_kwh=args.ev_reserve_soc_kwh,
+        num_evs=args.ev_num_vehicles,
+        charging_pool_rows=getattr(pool_generator, "cp_rows", None),
+        charging_pool_sample_size=args.charging_pool_sample_size,
+        combined_dist_matrix_csv=train_dist_csv,
+        combined_time_matrix_csv=train_time_csv,
+        check_solution=False,
+        generator=pool_generator,
+    )
 
     model = AttentionModel(
         env=env,
@@ -178,7 +164,6 @@ def main() -> None:
     else:
         print("Finished training and testing.")
     print(f"Accelerator: {accelerator}")
-    print(f"Distance mode: {args.distance_mode}")
     print(
         "EV params: "
         f"battery={args.ev_battery_capacity_kwh}kWh, "
@@ -189,14 +174,13 @@ def main() -> None:
     )
     print(
         "Charging pool: "
-        f"csv={args.charging_pool_csv}, "
+        f"csv={args.combined_details_csv}, "
         f"sample_size={args.charging_pool_sample_size}"
     )
-    if args.train_pool_csv:
-        print(
-            "Training pool mode: "
-            f"csv={args.train_pool_csv}, sample_size={args.pool_sample_size}"
-        )
+    print(
+        "Training pool mode: "
+        f"csv={pool_csv_path}, sample_size={args.pool_sample_size}"
+    )
     print(f"Best checkpoint: {best_ckpt_path if best_ckpt_path else 'not found'}")
     print(f"Test reward: {test_reward:.6f}")
     print(f"All test metrics: {metrics}")
@@ -208,12 +192,17 @@ def main() -> None:
         best_test_reward=best_test_reward,
     )
     if args.test_csv:
+        test_dist_csv = args.test_distance_matrix_csv or args.combined_dist_matrix_csv
+        test_time_csv = (
+            args.test_time_matrix_csv
+            or args.combined_time_matrix_csv
+            or args.combined_dist_matrix_csv
+        )
         custom_instance = load_vrptw_instance_from_csv(
             args.test_csv,
             vehicle_capacity=args.csv_vehicle_capacity,
-            distance_mode=args.distance_mode,
-            distance_matrix_csv=args.test_distance_matrix_csv,
-            time_matrix_csv=args.test_time_matrix_csv,
+            distance_matrix_csv=test_dist_csv,
+            time_matrix_csv=test_time_csv,
             device=model_for_solution.device,
         )
         custom_reward = print_one_solution(
@@ -222,20 +211,8 @@ def main() -> None:
             custom_instance,
             title=f"CSV test-instance solution ({args.test_csv})",
         )
-        if args.test_distance_matrix_csv:
-            print(
-                "CSV test distance source: "
-                f"matrix ({args.test_distance_matrix_csv})"
-            )
-        else:
-            print(f"CSV test distance source: mode ({args.distance_mode})")
-        if args.test_time_matrix_csv:
-            print(
-                "CSV test travel-time source: "
-                f"matrix ({args.test_time_matrix_csv})"
-            )
-        else:
-            print("CSV test travel-time source: distance source")
+        print("CSV test distance source: " f"matrix ({test_dist_csv})")
+        print("CSV test travel-time source: " f"matrix ({test_time_csv})")
         print(f"CSV instance reward: {custom_reward:.6f}")
     if args.print_solution and not args.test_csv:
         print_one_solution(model_for_solution, env)

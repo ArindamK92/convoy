@@ -67,17 +67,12 @@ def build_customer_visit_trace(
     actions_1d: torch.Tensor,
 ) -> list[dict]:
     """Simulate one decoded solution and collect per-visit trace for customers/CPs."""
-    all_locs = td_state["locs"][0]
-    if "dist_matrix" in td_state.keys():
-        dist_matrix = td_state["dist_matrix"][0]
-    else:
-        dist_matrix = env._distance(
-            all_locs[:, None, :], all_locs[None, :, :], env.distance_mode
+    if "dist_matrix" not in td_state.keys() or "travel_time_matrix" not in td_state.keys():
+        raise ValueError(
+            "Combined mode requires dist_matrix and travel_time_matrix for trace printing."
         )
-    if "travel_time_matrix" in td_state.keys():
-        travel_matrix = td_state["travel_time_matrix"][0]
-    else:
-        travel_matrix = dist_matrix
+    dist_matrix = td_state["dist_matrix"][0]
+    travel_matrix = td_state["travel_time_matrix"][0]
 
     durations = td_state["durations"][0]
     tw_starts = td_state["time_windows"][0, :, 0]

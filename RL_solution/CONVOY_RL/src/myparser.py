@@ -61,12 +61,7 @@ def parse_customer(csv_path: str):
 
 
 def parse_distance_matrix_csv(matrix_csv_path: str) -> torch.Tensor:
-    """Parse a square numeric distance matrix CSV into a torch tensor.
-
-    Accepted shapes:
-        - [N, N] for customer-to-customer only.
-        - [N+1, N+1] where row/col 0 correspond to depot.
-    """
+    """Parse a square numeric matrix CSV into a torch tensor."""
     rows = []
     with open(matrix_csv_path, "r", encoding="utf-8") as f:
         reader = csv.reader(f)
@@ -89,7 +84,6 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="Train and test RL4CO on VRPTW (CVRPTW in rl4co)."
     )
-    parser.add_argument("--num-loc", type=int, default=20, help="Number of customers.")
     parser.add_argument("--epochs", type=int, default=100, help="Training epochs.")
     parser.add_argument("--batch-size", type=int, default=256, help="Train batch size.")
     parser.add_argument(
@@ -165,13 +159,6 @@ def parse_args() -> argparse.Namespace:
         help="Vehicle capacity used to normalize CSV demands.",
     )
     parser.add_argument(
-        "--distance-mode",
-        type=str,
-        default="manhattan",
-        choices=["euclidean", "manhattan", "linear_sum"],
-        help="Distance function for travel time and reward.",
-    )
-    parser.add_argument(
         "--ev-battery-capacity-kwh",
         type=float,
         default=60.0,
@@ -202,22 +189,31 @@ def parse_args() -> argparse.Namespace:
         help="Number of EVs available in fleet.",
     )
     parser.add_argument(
-        "--charging-pool-csv",
-        type=str,
-        default="CP_details.csv",
-        help="Charging station pool CSV (x,y,charge_rate,charging_cost_per_kWh).",
-    )
-    parser.add_argument(
         "--charging-pool-sample-size",
         type=int,
         default=5,
         help="Number of charging stations sampled per instance.",
     )
     parser.add_argument(
-        "--train-pool-csv",
+        "--combined-details-csv",
+        type=str,
+        required=True,
+        help=(
+            "Combined details CSV (ID,type,lng,lat,...) that includes depot/customers/CPs. "
+            "Training customer sampling and charging-pool sampling are sourced from this file."
+        ),
+    )
+    parser.add_argument(
+        "--combined-dist-matrix-csv",
+        type=str,
+        required=True,
+        help="Combined depot+customers+CP distance matrix CSV (e.g., 251x251).",
+    )
+    parser.add_argument(
+        "--combined-time-matrix-csv",
         type=str,
         default=None,
-        help="CSV customer pool used to sample instances during training.",
+        help="Combined depot+customers+CP travel-time matrix CSV (e.g., 251x251).",
     )
     parser.add_argument(
         "--pool-sample-size",
@@ -232,27 +228,15 @@ def parse_args() -> argparse.Namespace:
         help="Vehicle capacity used for demand normalization in pool CSV mode.",
     )
     parser.add_argument(
-        "--distance-matrix-csv",
-        type=str,
-        default=None,
-        help="External distance matrix CSV for train-pool mode.",
-    )
-    parser.add_argument(
-        "--time-matrix-csv",
-        type=str,
-        default=None,
-        help="External travel-time matrix CSV for train-pool mode.",
-    )
-    parser.add_argument(
         "--test-distance-matrix-csv",
         type=str,
         default=None,
-        help="External distance matrix CSV for test-csv instance.",
+        help="Optional distance matrix override for test-csv instance.",
     )
     parser.add_argument(
         "--test-time-matrix-csv",
         type=str,
         default=None,
-        help="External travel-time matrix CSV for test-csv instance.",
+        help="Optional travel-time matrix override for test-csv instance.",
     )
     return parser.parse_args()

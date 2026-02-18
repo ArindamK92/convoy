@@ -1,4 +1,4 @@
-# CONVOY2 Run Commands
+# CONVOY2 Combined-CSV Run Commands
 
 ## Setup
 ```bash
@@ -6,112 +6,88 @@ source ~/myenv/bin/activate
 cd ~/CONVOY2
 ```
 
-## Basic Run
-```bash
-python3 test_convoy_CPs1.py
-```
+## Required Inputs
+- `--combined-details-csv` : combined depot/customer/CP details CSV
+- `--combined-dist-matrix-csv` : combined distance matrix CSV
 
-## Print Solution Paths
-```bash
-python3 test_convoy_CPs1.py --print-solution
-```
+`--combined-time-matrix-csv` is optional. If omitted, distance matrix is reused as travel-time matrix.
 
-## Fixed-Set Quality Check
-```bash
-python3 test_convoy_CPs1.py --epochs 100 --fixed-eval-every 5 --fixed-eval-size 1000
-```
+## Accepted Arguments
 
-## Test Using CSV Instance
-```bash
-python3 test_convoy_CPs1.py --test-csv data/vrptw_data.csv --csv-vehicle-capacity 30
-```
+Required:
+- `--combined-details-csv PATH`
+- `--combined-dist-matrix-csv PATH`
 
-## Distance Mode Options
-```bash
-python3 test_convoy_CPs1.py --distance-mode euclidean
-python3 test_convoy_CPs1.py --distance-mode linear_sum
-python3 test_convoy_CPs1.py --distance-mode manhattan --test-csv data/vrptw_data.csv --print-solution
-```
+Optional:
+- `-h, --help`
+- `--epochs INT` (default: `100`)
+- `--batch-size INT` (default: `256`)
+- `--eval-batch-size INT` (default: `512`)
+- `--train-data-size INT` (default: `4096`)
+- `--val-data-size INT` (default: `1024`)
+- `--test-data-size INT` (default: `1024`)
+- `--lr FLOAT` (default: `1e-4`)
+- `--max-time FLOAT` (default: `480.0`)
+- `--seed INT` (default: `42`)
+- `--baseline {exponential,rollout,shared,mean,no,critic}` (default: `exponential`)
+- `--accelerator {auto,cpu,gpu}` (default: `auto`)
+- `--print-solution` (flag)
+- `--fixed-eval-size INT` (default: `512`)
+- `--fixed-eval-every INT` (default: `5`)
+- `--checkpoint-dir PATH` (default: `checkpoints_vrptw`)
+- `--save-model` (flag)
+- `--test-csv PATH`
+- `--csv-vehicle-capacity FLOAT` (default: `30.0`)
+- `--ev-battery-capacity-kwh FLOAT` (default: `60.0`)
+- `--ev-energy-rate-kwh-per-distance FLOAT` (default: `0.5`)
+- `--ev-charge-rate-kwh-per-hour FLOAT` (default: `120.0`)
+- `--ev-reserve-soc-kwh FLOAT` (default: `0.0`)
+- `--ev-num-vehicles INT` (default: `1`)
+- `--charging-pool-sample-size INT` (default: `5`)
+- `--combined-time-matrix-csv PATH` (default: use `--combined-dist-matrix-csv`)
+- `--pool-sample-size INT` (default: `30`)
+- `--pool-vehicle-capacity FLOAT` (default: `30.0`)
+- `--test-distance-matrix-csv PATH` (optional with `--test-csv`; default: use `--combined-dist-matrix-csv`)
+- `--test-time-matrix-csv PATH` (optional with `--test-csv`; default: use `--combined-time-matrix-csv`, else `--combined-dist-matrix-csv`)
 
-## Train From 200-Customer Pool
-```bash
-python3 test_convoy_CPs1.py --train-pool-csv data/customers200.csv --pool-sample-size 30
-```
-
-## Train Pool + External Distance Matrix
-```bash
-python3 test_convoy_CPs1.py --train-pool-csv data/customers200.csv --pool-sample-size 30 --distance-matrix-csv data/dist_201x201.csv
-```
-
-## Train + CSV Test
+## Basic Train/Test Run
 ```bash
 python3 test_convoy_CPs1.py \
-  --train-pool-csv data/customers200.csv \
-  --pool-sample-size 30 \
-  --epochs 100 \
-  --test-csv data/vrptw_data.csv \
+  --combined-details-csv data/combined_cust_CP_details.csv \
+  --combined-dist-matrix-csv data/combined_dist.csv
+```
+
+## Train + Print One Decoded Solution
+```bash
+python3 test_convoy_CPs1.py \
+  --combined-details-csv data/combined_cust_CP_details.csv \
+  --combined-dist-matrix-csv data/combined_dist.csv \
+  --combined-time-matrix-csv data/combined_time.csv \
   --print-solution
 ```
 
-## Train + Distance Matrix + CSV Test
-```bash
-python3 test_convoy_CPs1.py \
-  --train-pool-csv data/customers200.csv \
-  --pool-sample-size 30 \
-  --distance-matrix-csv data/dist_201x201.csv \
-  --test-csv data/vrptw_data.csv \
-  --print-solution
-```
+## Train + CSV Test Instance
+`--test-distance-matrix-csv` and `--test-time-matrix-csv` are optional when using `--test-csv`.  
+If omitted, testing falls back to combined matrices.
 
-## Train + Distance Matrix for Train and Test
 ```bash
 python3 test_convoy_CPs1.py \
-  --train-pool-csv data/customers200.csv \
-  --pool-sample-size 30 \
-  --distance-matrix-csv data/dist_201x201.csv \
-  --test-csv data/vrptw_data.csv \
-  --test-distance-matrix-csv data/dist_201x201.csv \
-  --print-solution
-```
-
-## Train + Distance and Time Matrices
-```bash
-python3 test_convoy_CPs1.py \
-  --train-pool-csv data/customers200.csv \
-  --pool-sample-size 30 \
-  --distance-matrix-csv data/dist_201x201.csv \
-  --time-matrix-csv data/time_201x201.csv \
-  --test-csv data/vrptw_data.csv \
-  --test-distance-matrix-csv data/dist_201x201.csv \
-  --test-time-matrix-csv data/time_201x201.csv \
-  --print-solution
-```
-
-## Custom Charging Points
-```bash
-python3 test_convoy_CPs1.py \
-  --train-pool-csv data/customers200.csv \
-  --distance-matrix-csv data/dist_201x201.csv \
-  --time-matrix-csv data/time_201x201.csv \
-  --test-csv data/vrptw_data.csv \
-  --test-distance-matrix-csv data/dist_201x201.csv \
-  --test-time-matrix-csv data/time_201x201.csv \
-  --charging-pool-csv data/CP_details.csv \
-  --charging-pool-sample-size 10 \
-  --ev-num-vehicles 5 \
+  --combined-details-csv data/combined_cust_CP_details.csv \
+  --combined-dist-matrix-csv data/combined_dist.csv \
+  --combined-time-matrix-csv data/combined_time.csv \
+  --test-csv data/test_delivery30.csv \
+  --test-distance-matrix-csv data/combined_dist.csv \
+  --test-time-matrix-csv data/combined_time.csv \
   --print-solution
 ```
 
 ## Save Best Model and Reuse
 ```bash
 python3 test_convoy_CPs1.py \
-  --train-pool-csv data/customers200.csv \
-  --distance-matrix-csv data/dist_201x201.csv \
-  --time-matrix-csv data/time_201x201.csv \
+  --combined-details-csv data/combined_cust_CP_details.csv \
+  --combined-dist-matrix-csv data/combined_dist.csv \
+  --combined-time-matrix-csv data/combined_time.csv \
   --test-csv data/test_delivery30.csv \
-  --test-distance-matrix-csv data/dist_201x201.csv \
-  --test-time-matrix-csv data/time_201x201.csv \
-  --charging-pool-csv data/CP_details.csv \
   --charging-pool-sample-size 10 \
   --ev-num-vehicles 5 \
   --print-solution \
