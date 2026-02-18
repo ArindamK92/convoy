@@ -1,0 +1,245 @@
+"""Main CVRPTW training/testing pipeline. See README.md for run commands."""
+
+import os
+import shutil
+
+import lightning as L
+import torch
+
+from lightning.pytorch.callbacks import ModelCheckpoint
+from rl4co.envs import CVRPTWEnv
+from rl4co.models import AttentionModel
+from rl4co.utils import RL4COTrainer
+from torch.serialization import add_safe_globals
+
+from src.csv_customer_pool_generator import CSVCustomerPoolGenerator
+from src.convoy import convoy
+from src.eval_utils import evaluate_policy_on_dataset, extract_reward
+from src.fixed_eval_callback import FixedSetEvalCallback
+from src.helper import print_one_solution, print_quality_table
+from src.instance_loader import load_vrptw_instance_from_csv
+from src.myparser import parse_args
+
+# Backward-compatible alias for older references.
+CVRPTWCustomDistanceEnv = convoy
+
+
+
+def main() -> None:
+    """Train, evaluate, and optionally decode solutions for the configured CVRPTW run."""
+    args = parse_args()
+    L.seed_everything(args.seed, workers=True)
+
+    if args.accelerator == "auto":
+        accelerator = "gpu" if torch.cuda.is_available() else "cpu"
+    else:
+        accelerator = args.accelerator
+
+    if args.train_pool_csv:
+        pool_generator = CSVCustomerPoolGenerator(
+            csv_path=args.train_pool_csv,
+            sample_size=args.pool_sample_size,
+            vehicle_capacity=args.pool_vehicle_capacity,
+            max_time=args.max_time,
+            distance_matrix_csv=args.distance_matrix_csv,
+            time_matrix_csv=args.time_matrix_csv,
+            distance_mode_for_depot=args.distance_mode,
+        )
+        env = convoy(
+            distance_mode=args.distance_mode,
+            battery_capacity_kwh=args.ev_battery_capacity_kwh,
+            energy_rate_kwh_per_distance=args.ev_energy_rate_kwh_per_distance,
+            charge_rate_kwh_per_hour=args.ev_charge_rate_kwh_per_hour,
+            reserve_soc_kwh=args.ev_reserve_soc_kwh,
+            num_evs=args.ev_num_vehicles,
+            charging_pool_csv=args.charging_pool_csv,
+            charging_pool_sample_size=args.charging_pool_sample_size,
+            check_solution=False,
+            generator=pool_generator,
+        )
+    else:
+        env = convoy(
+            distance_mode=args.distance_mode,
+            battery_capacity_kwh=args.ev_battery_capacity_kwh,
+            energy_rate_kwh_per_distance=args.ev_energy_rate_kwh_per_distance,
+            charge_rate_kwh_per_hour=args.ev_charge_rate_kwh_per_hour,
+            reserve_soc_kwh=args.ev_reserve_soc_kwh,
+            num_evs=args.ev_num_vehicles,
+            charging_pool_csv=args.charging_pool_csv,
+            charging_pool_sample_size=args.charging_pool_sample_size,
+            check_solution=False,
+            generator_params={
+                "num_loc": args.num_loc,
+                "max_time": args.max_time,
+                "scale": False,
+            },
+        )
+
+    model = AttentionModel(
+        env=env,
+        baseline=args.baseline,
+        batch_size=args.batch_size,
+        val_batch_size=args.eval_batch_size,
+        test_batch_size=args.eval_batch_size,
+        train_data_size=args.train_data_size,
+        val_data_size=args.val_data_size,
+        test_data_size=args.test_data_size,
+        optimizer_kwargs={"lr": args.lr},
+    )
+
+    fixed_eval_dataset = env.dataset(args.fixed_eval_size, phase="test")
+    saved_best_ckpt_path = os.path.join(args.checkpoint_dir, "best_model.ckpt")
+    add_safe_globals([CVRPTWEnv, convoy, CVRPTWCustomDistanceEnv])
+
+    checkpoint_callback = ModelCheckpoint(
+        dirpath=args.checkpoint_dir,
+        filename="vrptw-{epoch:03d}",
+        monitor="val/reward",
+        mode="max",
+        save_top_k=1,
+        save_last=True,
+        auto_insert_metric_name=False,
+    )
+    fixed_eval_callback = FixedSetEvalCallback(
+        env=env,
+        dataset=fixed_eval_dataset,
+        batch_size=args.eval_batch_size,
+        every_n_epochs=args.fixed_eval_every,
+        eval_fn=evaluate_policy_on_dataset,
+    )
+
+    trainer = RL4COTrainer(
+        accelerator=accelerator,
+        devices=1,
+        max_epochs=args.epochs,
+        precision=32,
+        logger=False,
+        callbacks=[checkpoint_callback, fixed_eval_callback],
+        enable_checkpointing=True,
+        enable_model_summary=False,
+    )
+
+    fixed_history: list[tuple[int, float]] = []
+    best_ckpt_path = ""
+    best_ckpt_fixed_reward = None
+    best_test_reward = None
+    run_mode = "train"
+
+    if args.save_model and os.path.exists(saved_best_ckpt_path):
+        run_mode = "load_saved"
+        best_ckpt_path = saved_best_ckpt_path
+        print(f"Found saved best checkpoint: {saved_best_ckpt_path}. Skipping training.")
+        model_for_solution = AttentionModel.load_from_checkpoint(
+            best_ckpt_path, env=env, weights_only=False
+        )
+        initial_fixed_reward = evaluate_policy_on_dataset(
+            model_for_solution, env, fixed_eval_dataset, args.eval_batch_size
+        )
+        final_fixed_reward = initial_fixed_reward
+        best_ckpt_fixed_reward = initial_fixed_reward
+        best_test_results = trainer.test(model_for_solution, verbose=False)
+        metrics = best_test_results[0]
+        test_reward = extract_reward(metrics)
+        best_test_reward = test_reward
+    else:
+        initial_fixed_reward = evaluate_policy_on_dataset(
+            model, env, fixed_eval_dataset, args.eval_batch_size
+        )
+        trainer.fit(model)
+        fixed_history = fixed_eval_callback.history
+        best_ckpt_path = checkpoint_callback.best_model_path
+        if not best_ckpt_path:
+            raise RuntimeError(
+                "No best checkpoint found. Ensure val/reward is logged during training."
+            )
+        if args.save_model:
+            os.makedirs(args.checkpoint_dir, exist_ok=True)
+            if os.path.abspath(best_ckpt_path) != os.path.abspath(saved_best_ckpt_path):
+                shutil.copyfile(best_ckpt_path, saved_best_ckpt_path)
+            best_ckpt_path = saved_best_ckpt_path
+            print(f"Saved best checkpoint: {best_ckpt_path}")
+
+        model_for_solution = AttentionModel.load_from_checkpoint(
+            best_ckpt_path, env=env, weights_only=False
+        )
+        best_ckpt_fixed_reward = evaluate_policy_on_dataset(
+            model_for_solution, env, fixed_eval_dataset, args.eval_batch_size
+        )
+        best_test_results = trainer.test(model_for_solution, verbose=False)
+        metrics = best_test_results[0]
+        test_reward = extract_reward(metrics)
+        best_test_reward = test_reward
+        final_fixed_reward = evaluate_policy_on_dataset(
+            model, env, fixed_eval_dataset, args.eval_batch_size
+        )
+
+    if run_mode == "load_saved":
+        print("Loaded saved model and finished testing.")
+    else:
+        print("Finished training and testing.")
+    print(f"Accelerator: {accelerator}")
+    print(f"Distance mode: {args.distance_mode}")
+    print(
+        "EV params: "
+        f"battery={args.ev_battery_capacity_kwh}kWh, "
+        f"energy_rate={args.ev_energy_rate_kwh_per_distance}kWh/dist, "
+        f"charge_rate={args.ev_charge_rate_kwh_per_hour}kWh/h, "
+        f"reserve={args.ev_reserve_soc_kwh}kWh, "
+        f"fleet_size={args.ev_num_vehicles}"
+    )
+    print(
+        "Charging pool: "
+        f"csv={args.charging_pool_csv}, "
+        f"sample_size={args.charging_pool_sample_size}"
+    )
+    if args.train_pool_csv:
+        print(
+            "Training pool mode: "
+            f"csv={args.train_pool_csv}, sample_size={args.pool_sample_size}"
+        )
+    print(f"Best checkpoint: {best_ckpt_path if best_ckpt_path else 'not found'}")
+    print(f"Test reward: {test_reward:.6f}")
+    print(f"All test metrics: {metrics}")
+    print_quality_table(
+        initial_reward=initial_fixed_reward,
+        fixed_history=fixed_history,
+        best_ckpt_reward=best_ckpt_fixed_reward,
+        final_model_reward=final_fixed_reward,
+        best_test_reward=best_test_reward,
+    )
+    if args.test_csv:
+        custom_instance = load_vrptw_instance_from_csv(
+            args.test_csv,
+            vehicle_capacity=args.csv_vehicle_capacity,
+            distance_mode=args.distance_mode,
+            distance_matrix_csv=args.test_distance_matrix_csv,
+            time_matrix_csv=args.test_time_matrix_csv,
+            device=model_for_solution.device,
+        )
+        custom_reward = print_one_solution(
+            model_for_solution,
+            env,
+            custom_instance,
+            title=f"CSV test-instance solution ({args.test_csv})",
+        )
+        if args.test_distance_matrix_csv:
+            print(
+                "CSV test distance source: "
+                f"matrix ({args.test_distance_matrix_csv})"
+            )
+        else:
+            print(f"CSV test distance source: mode ({args.distance_mode})")
+        if args.test_time_matrix_csv:
+            print(
+                "CSV test travel-time source: "
+                f"matrix ({args.test_time_matrix_csv})"
+            )
+        else:
+            print("CSV test travel-time source: distance source")
+        print(f"CSV instance reward: {custom_reward:.6f}")
+    if args.print_solution and not args.test_csv:
+        print_one_solution(model_for_solution, env)
+
+
+if __name__ == "__main__":
+    main()
