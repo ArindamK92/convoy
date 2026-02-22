@@ -1,0 +1,13 @@
+# Core data/runtime
+pandas>=2.0
+scipy>=1.10
+st-dbscan>=0.2.3
+
+# RL stack
+torch>=2.0
+tensordict>=0.5
+lightning>=2.2
+rl4co>=0.5
+
+# MILP solver Python bindings (license required at runtime)
+gurobipy>=11.0

@@ -1,0 +1,39 @@
+site_name: CONVOY2 Docs
+site_description: Documentation for CONVOY2 RL + Optimal/Heuristic workflows
+site_dir: site
+repo_name: CONVOY2
+
+theme:
+  name: material
+  features:
+    - navigation.sections
+    - navigation.expand
+    - content.code.copy
+
+markdown_extensions:
+  - admonition
+  - pymdownx.superfences
+  - pymdownx.highlight
+  - tables
+
+plugins:
+  - search
+  - mkdocstrings:
+      handlers:
+        python:
+          paths:
+            - .
+
+nav:
+  - Home: index.md
+  - Quickstart: quickstart.md
+  - CLI:
+      - Combined Runner (`convoy_main.py`): cli/convoy_main.md
+      - RL Test Runner (`tests/test_convoy_CPs1.py`): cli/test_convoy_CPs1.md
+      - Opt+Heu Test Runner (`tests/test_convoy_opt_and_heu.py`): cli/test_convoy_opt_and_heu.md
+  - Data Formats: data_formats.md
+  - Architecture: architecture.md
+  - Troubleshooting: troubleshooting.md
+  - API:
+      - convoy_parser: api/convoy_parser.md
+      - convoy_main: api/convoy_main.md
