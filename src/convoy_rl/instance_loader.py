@@ -13,6 +13,7 @@ def load_vrptw_instance_from_csv(
     distance_matrix_csv: str | None = None,
     time_matrix_csv: str | None = None,
     depot_charge_rate_kwh_per_hour: float = 120.0,
+    depot_charge_cost_per_kwh: float = 0.0,
     device: torch.device | str = "cpu",
 ):
     """Load one VRPTW instance from CSV into a TensorDict batch of size 1.
@@ -28,6 +29,8 @@ def load_vrptw_instance_from_csv(
         raise ValueError("Combined mode requires test distance matrix CSV.")
     if depot_charge_rate_kwh_per_hour <= 0:
         raise ValueError("--ev-charge-rate-kwh-per-hour must be > 0.")
+    if depot_charge_cost_per_kwh < 0:
+        raise ValueError("depot_charge_cost_per_kwh must be >= 0.")
 
     depot, customers, charging_points = parse_customer(csv_path)
     loc_nodes = customers + charging_points
@@ -39,6 +42,7 @@ def load_vrptw_instance_from_csv(
     customer_ids_int = [int(cid) for cid in customer_ids]
     cp_ids_int = [int(cp["cp_id"]) for cp in charging_points]
     depot_id = int(depot.get("node_id", 0))
+    depot_cost = float(depot.get("charging_cost_per_kwh", depot_charge_cost_per_kwh))
 
     depot_xy = torch.tensor([[depot["x"], depot["y"]]], dtype=torch.float32, device=device)
     locs = torch.tensor(
@@ -112,6 +116,7 @@ def load_vrptw_instance_from_csv(
         charge_cost_per_kwh_per_node = torch.zeros(
             (1, total_nodes), dtype=torch.float32, device=device
         )
+        charge_cost_per_kwh_per_node[:, 0] = depot_cost
         charge_cost_per_kwh_per_node[:, station_start:] = torch.tensor(
             [float(cp["charging_cost_per_kwh"]) for cp in charging_points],
             dtype=torch.float32,

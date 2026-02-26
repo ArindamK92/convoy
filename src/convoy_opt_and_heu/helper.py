@@ -1,3 +1,5 @@
+"""Preprocessing helpers for building Opt+Heu instances from CSV inputs."""
+
 import math
 import time 
 import random
@@ -13,6 +15,8 @@ except ImportError:
     from ev import EV
 
 class Point:
+    """Simple 2D point utility used for geometric helpers."""
+
     def __init__(self, x, y):
         self.x = x
         self.y = y
@@ -86,6 +90,7 @@ def preProcess(
     alpha1=1,
     alpha2=1,
     random_seed=None,
+    use_full_instance=False,
 ):
     # Use an isolated RNG to avoid cross-run interference from other modules.
     rng = random.Random(random_seed) if random_seed is not None else random
@@ -134,6 +139,7 @@ def preProcess(
         global_id = int(row['ID'])  # global ID from input
         first_receive_tm = row['first_receive_tm']
         last_receive_tm = row['last_receive_tm']
+        service_time = float(row["service_time"]) if not pd.isna(row["service_time"]) else 0.0
         reward_ = row['reward']
         unit_charging_cost = row['unit_charging_cost']
         charge_rate_kwh_per_hour = row['charge_rate_kwh_per_hour']
@@ -153,7 +159,18 @@ def preProcess(
         # Check the type column and create the appropriate object
         if row['type'] == 'c':
             local_id = len(deliveries)  # Local ID is the index in the deliveries array
-            deliveries.append(Delivery(lat, long, local_id, global_id, first_receive_tm, last_receive_tm, reward_))
+            deliveries.append(
+                Delivery(
+                    lat,
+                    long,
+                    local_id,
+                    global_id,
+                    first_receive_tm,
+                    last_receive_tm,
+                    reward_,
+                    service_time=service_time,
+                )
+            )
             delivery_map_local_to_global[local_id] = global_id
             delivery_map_global_to_local[global_id] = local_id
             reward.append(reward_)
@@ -190,22 +207,19 @@ def preProcess(
 
 
 
-    # List of entities
-    W = {0} # Warehouse
-    D = set(range(0, nD)) 
-    C = set(range(1, nC + 1)) # CP starts from 1 as W is also considered as a CP and with id 0
-    C1 = W.union(C)
-    E = set(range(0, nE))
-    S = set(range(0, nS))
-
-    # Randomly sample deliveries and charging points as per user input.
+    # Select deliveries and charging points as per user input.
+    if use_full_instance:
+        nD = len(deliveries)
     if nD > len(deliveries):
         raise ValueError(
             "Requested nD={} deliveries, but only {} customers are available.".format(
                 nD, len(deliveries)
             )
         )
-    selected_delivery_idx = rng.sample(range(len(deliveries)), k=nD)
+    if use_full_instance:
+        selected_delivery_idx = list(range(len(deliveries)))
+    else:
+        selected_delivery_idx = rng.sample(range(len(deliveries)), k=nD)
     deliveries = [deliveries[i] for i in selected_delivery_idx]
     reward = [reward[i] for i in selected_delivery_idx]
 
@@ -218,13 +232,18 @@ def preProcess(
         )
     depot_idx = depot_indices[0]
     station_indices = [i for i, t in enumerate(cp_node_types) if t == "f"]
+    if use_full_instance:
+        nC = len(station_indices)
     if nC > len(station_indices):
         raise ValueError(
             "Requested nC={} charging stations, but only {} are available.".format(
                 nC, len(station_indices)
             )
         )
-    selected_station_idx = rng.sample(station_indices, k=nC)
+    if use_full_instance:
+        selected_station_idx = list(station_indices)
+    else:
+        selected_station_idx = rng.sample(station_indices, k=nC)
     selected_cp_idx = [depot_idx] + selected_station_idx
     cp = [cp[i] for i in selected_cp_idx]
     theta = [theta[i] for i in selected_cp_idx]
@@ -248,6 +267,14 @@ def preProcess(
     # Export selected depot/customers/CPs for downstream testing.
     # Overwrites if file already exists.
     _write_test_instance_csv(output_data_dir, node_info_by_global_id, deliveries, cp)
+
+    # List of entities (after selection/reindex).
+    W = {0}  # Warehouse
+    D = set(range(0, len(deliveries)))
+    C = set(range(1, len(cp)))  # CP starts from 1 (0 is depot)
+    C1 = W.union(C)
+    E = set(range(0, nE))
+    S = set(range(0, nS))
 
 
     # create EV object
@@ -278,6 +305,8 @@ def preProcess(
     psi_DC = {} # Energy requirement to travel between a delivery point and a charging point
     gamma_DD = {} # Time to reach from one delivery point to another
     gamma_DC = {} # Time to reach from one delivery point to charging point or opposite
+    psi_C0 = {}  # Energy requirement to travel from CP to depot
+    gamma_C0 = {}  # Time requirement to travel from CP to depot
 
 
 
@@ -300,6 +329,13 @@ def preProcess(
             # time12 = round(dist1c /vj, 2) # in min
             time12 = time1[(d1_global, c_global)]
             gamma_DC[(d1,c)] = time12
+
+    depot_global = cp_map_local_to_global[0]
+    for c in C:
+        c_global = cp_map_local_to_global[c]
+        dist_c0 = dist[(c_global, depot_global)]
+        psi_C0[c] = round(dist_c0 / mj, 2)
+        gamma_C0[c] = time1[(c_global, depot_global)]
             
     rateE = {} # charge acceptance rate at EV : equivalent to power in kW
     for j in E:
@@ -314,4 +350,4 @@ def preProcess(
     alpha1 = alpha1 # parameter for tuning number of successful deliveries
     alpha2 = alpha2 # parameter for tuning the energy cost
     
-    return cp, deliveries, theta, reward, C, D, E, C1, S, tau_start, tau_end, nS, EVs, gamma_DD, psi_DD, gamma_DC, psi_DC, beta_f, rateE, rateC, alpha1, alpha2
+    return cp, deliveries, theta, reward, C, D, E, C1, S, tau_start, tau_end, nS, EVs, gamma_DD, psi_DD, gamma_DC, psi_DC, beta_f, rateE, rateC, alpha1, alpha2, gamma_C0, psi_C0

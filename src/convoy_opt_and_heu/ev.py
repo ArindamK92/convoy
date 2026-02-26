@@ -1,5 +1,9 @@
 # -*- coding: utf-8 -*-
+"""EV state container used by Optimal+Heuristic routing logic."""
+
 class EV:
+    """Mutable EV route, battery, and cost tracking state."""
+
     def __init__(self, local_id, depot, battery_capacity):
         self.local_id = local_id
         self.T = [] # Departure time for assigned tasks. It will have |A| - 1 values

@@ -1,3 +1,5 @@
+"""Primary partial-charging heuristic used by Opt+Heu execution flow."""
+
 # import pandas as pd
 # import math
 # import os
@@ -18,8 +20,31 @@ def printDebug(string, val):
     if DEBUG == True:
         print(string, val)
 
-def heuristic(cp, deliveries, theta, reward, C, D, E, tau_start, tau_end, nS, EVs, gamma_DD, psi_DD, gamma_DC, psi_DC, beta_f, rateE, rateC):
+def heuristic(
+    cp,
+    deliveries,
+    theta,
+    reward,
+    C,
+    D,
+    E,
+    tau_start,
+    tau_end,
+    nS,
+    EVs,
+    gamma_DD,
+    psi_DD,
+    gamma_DC,
+    psi_DC,
+    beta_f,
+    usable_battery_kwh,
+    rateE,
+    rateC,
+):
     start_time = time.time() # Algorithm start time
+    max_soc = float(usable_battery_kwh)
+    if max_soc <= 0:
+        raise ValueError("usable_battery_kwh must be > 0.")
     
     # Create the KD-Tree
     lats = [c.latitude for c in cp[1:]] + [d.latitude for d in deliveries] # first cp is the depot
@@ -56,7 +81,7 @@ def heuristic(cp, deliveries, theta, reward, C, D, E, tau_start, tau_end, nS, EV
     # 
     # eps2 is the temporal threshold (maximum temporal distance) between two 
     # points to be considered related.     
-    ## Avg Euclidean dist among the fog lat lon values: 0.0037424493333129533
+    ## Avg Euclidean dist among the CP lat/lon values: 0.0037424493333129533
 
     # tune eps1 and eps2 depending on the values of  deliveries_spatiotemporal_params
     st_dbscan = ST_DBSCAN(eps1 = 0.2, eps2 = 0.2, min_samples = 1) 
@@ -88,11 +113,12 @@ def heuristic(cp, deliveries, theta, reward, C, D, E, tau_start, tau_end, nS, EV
         
         for delivery in sorted_deliveries:
             d_id = delivery.local_id
+            service_time_d = float(getattr(delivery, "service_time", 0.0))
             #print("cluster:", c_id, " delivery: ", d_id, "delivery start time: ", tau_start[d_id])
             
             energy_cost_min = 9999999 # cost is measured in terms of energy used
             assigned_EV = None
-            time_req_for_delivery = -1
+            departure_after_service = -1
             for e in EVs:
                 if e.totalSubtrip >= max_subtrip_per_EV:
                     printDebug("Max delivery reached. EV: ", e.local_id)
@@ -128,20 +154,25 @@ def heuristic(cp, deliveries, theta, reward, C, D, E, tau_start, tau_end, nS, EV
                             e.subtrips_energy_sequence.append(e.subtrip_energy)
                             e.subtrip_energy = 0
                             SoC =  e.B_res - energy_to_CP
-                            req_charge = beta_f - SoC
+                            req_charge = max(max_soc - SoC, 0.0)
                             
                             # compute departure time
                             e.T.append(e.t_ed)
-                            e.t_ed = gamma_DC[(last_loc.local_id, nearest_cp_id_from_last_point)] +  req_charge/min(rateE[e_id], rateC[nearest_cp_id_from_last_point]) # reaching time + charging time
-                            e.B_res = beta_f # reset battery
-                            e.B_trace.append(beta_f)
+                            e.t_ed = (
+                                e.t_ed
+                                + gamma_DC[(last_loc.local_id, nearest_cp_id_from_last_point)]
+                                + req_charge/min(rateE[e_id], rateC[nearest_cp_id_from_last_point])
+                            ) # accumulated time + reaching time + charging time
+                            e.B_res = max_soc # reset battery
+                            e.B_trace.append(max_soc)
                         continue
                     
                     reaching_time = e.t_ed + duration_lastLoc2delivery
-                    if reaching_time <= tau_end[d_id]:
+                    service_start = max(reaching_time, tau_start[d_id])
+                    if service_start <= tau_end[d_id]:
                         assigned_EV = e
                         energy_cost_min = energy_req
-                        time_req_for_delivery = duration_lastLoc2delivery
+                        departure_after_service = service_start + service_time_d
             if assigned_EV != None:
                 delivery.assigned_EV = assigned_EV
                 assigned_EV.assigneddeliveries.append(delivery.local_id)
@@ -152,9 +183,7 @@ def heuristic(cp, deliveries, theta, reward, C, D, E, tau_start, tau_end, nS, EV
                 t_dep = t_ed # As there is no sensing start time
                 assigned_EV.A.append(delivery)
                 assigned_EV.T.append(t_dep)
-                #assigned_EV.t_ed = max((t_dep +  time_req_for_delivery),  tau_end[d_id]) # old version
-                assigned_EV.t_ed = min(max((t_dep +  time_req_for_delivery), tau_start[d_id]), tau_end[d_id])# earliest departure time at the delivery waypoint ## AK: New change
-                #assigned_EV.t_ed = (t_dep +  time_req_for_delivery) # if only deadline exists. no slot start time
+                assigned_EV.t_ed = departure_after_service
                 # assigned_EV.totalEnergyUsed = assigned_EV.totalEnergyUsed + energy_req_for_delivery
                 assigned_EV.subtrip_energy = assigned_EV.subtrip_energy + energy_cost_min
                 B_res = assigned_EV.B_res - energy_cost_min
@@ -211,7 +240,7 @@ def heuristic(cp, deliveries, theta, reward, C, D, E, tau_start, tau_end, nS, EV
         # print(e.visited_CP_sequence)
         # print("Energy per subtrip: ", e.subtrips_energy_sequence)
         L = len(e.visited_CP_sequence)  # Number of assigned CP = total assigned subtrips + 1
-        SoC = beta_f
+        SoC = max_soc
         for l in range(1, L):
             cp_current = e.visited_CP_sequence[l]   # visited_CP_sequence starts with d_0
             energy_used_in_last_subtrip = e.subtrips_energy_sequence[l-1]
@@ -221,7 +250,7 @@ def heuristic(cp, deliveries, theta, reward, C, D, E, tau_start, tau_end, nS, EV
             
             # Last trip to depot
             if l == L-1:
-                charging_amount = beta_f - SoC
+                charging_amount = max_soc - SoC
                 charging_cost = round(charging_amount * unit_cost_current_cp, 2)
                 partial_charging_sequence.append(charging_amount)
                 partial_charging_cost_sequence.append(charging_cost)
@@ -235,23 +264,23 @@ def heuristic(cp, deliveries, theta, reward, C, D, E, tau_start, tau_end, nS, EV
                 cp_at_l2 = e.visited_CP_sequence[l2]   # visited_CP_sequence starts with d_0
                 _energy_req = e.subtrips_energy_sequence[l2-1]
                 energy_to_next_best_cp = energy_to_next_best_cp + _energy_req
-                if energy_to_next_best_cp > beta_f:
-                    charging_amount = beta_f - SoC
+                if energy_to_next_best_cp > max_soc:
+                    charging_amount = max_soc - SoC
                     charging_cost = round(charging_amount * unit_cost_current_cp,2)
                     partial_charging_sequence.append(charging_amount)
                     partial_charging_cost_sequence.append(charging_cost)
-                    SoC = beta_f
+                    SoC = max_soc
                     total_cost = total_cost + charging_cost
                     total_energy = total_energy + charging_amount
                     break
 
                 unit_cost_at_l2_cp = theta[cp_at_l2.local_id]
                 if unit_cost_at_l2_cp < unit_cost_current_cp:
-                    charging_amount = energy_to_next_best_cp - SoC
+                    charging_amount = max(energy_to_next_best_cp - SoC, 0.0)
                     charging_cost = round(charging_amount * unit_cost_current_cp,2)
                     partial_charging_sequence.append(charging_amount)
                     partial_charging_cost_sequence.append(charging_cost)
-                    SoC = energy_to_next_best_cp
+                    SoC = SoC + charging_amount
                     total_cost = total_cost + charging_cost
                     total_energy = total_energy + charging_amount
                     break

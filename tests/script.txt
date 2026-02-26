@@ -1,0 +1,185 @@
+# Run 1: full pipeline on a small instance.
+# Includes Optimal + Heuristic + RL + Baseline (no skip flags),
+# runs 5 iterations, and forwards fixed seeds to RL/Opt+Heu extras.
+python3 convoy_main.py   --combined-details-csv data/combined_data_jd200_1.csv   --combined-dist-matrix-csv data/distance_matrix_jd200_1.csv   --combined-time-matrix-csv data/time_matrix_jd200_1.csv   --customer-num 5   --charging-stations-num 3   --ev-num 2   --iterations 5   --results-file jd200_cust5_seed111_111_v12.csv --run-baseline  --opt-rl-extra "--print-solution --save-model --seed 111"   --opt-heu-extra "--random-seed 111"
+
+# Run 2: larger instance with heuristic + RL + baseline (Optimal skipped).
+# --skip-optimal disables MILP, --clear-rl-checkpoints forces RL retraining,
+# and results are written to a separate CSV.
+python3 convoy_main.py \
+  --combined-details-csv data/combined_data_jd200_1.csv \
+  --combined-dist-matrix-csv data/distance_matrix_jd200_1.csv \
+  --combined-time-matrix-csv data/time_matrix_jd200_1.csv \
+  --customer-num 20 \
+  --charging-stations-num 10 \
+  --ev-num 5 \
+  --iterations 5 \
+  --results-file jd200_cust20_cp10_ev5_seed111_111_v12.csv \
+  --run-baseline \
+  --clear-rl-checkpoints \
+  --opt-rl-extra "--print-solution --save-model --seed 111" \
+  --opt-heu-extra "--skip-optimal --random-seed 111"
+
+
+# With Beam Search
+python3 convoy_main.py \
+  --combined-details-csv data/combined_data_jd200_1.csv \
+  --combined-dist-matrix-csv data/distance_matrix_jd200_1.csv \
+  --combined-time-matrix-csv data/time_matrix_jd200_1.csv \
+  --customer-num 5 \
+  --charging-stations-num 3 \
+  --ev-num 2 \
+  --iterations 1 \
+  --only-rl \
+  --run-baseline \
+  --baseline-print-route-trace \
+  --baseline-print-charging-events \
+  --opt-rl-extra "--print-solution --save-model --seed 111 --decode-type beam_search --decode-beam-width 16" \
+  --opt-heu-extra "--random-seed 111" \
+  --clear-rl-checkpoints
+
+With POMO:
+python3 convoy_main.py \
+  --combined-details-csv data/combined_data_jd200_1.csv \
+  --combined-dist-matrix-csv data/distance_matrix_jd200_1.csv \
+  --combined-time-matrix-csv data/time_matrix_jd200_1.csv \
+  --customer-num 5 \
+  --charging-stations-num 3 \
+  --ev-num 2 \
+  --iterations 1 \
+  --only-rl \
+  --clear-rl-checkpoints \
+  --opt-rl-extra "--rl-algo pomo --baseline shared --pomo-num-starts 16 --pomo-num-augment 8 --decode-type multistart_greedy --decode-num-starts 16 --decode-select-best --print-solution --seed 111"
+
+
+
+python3 convoy_main.py \
+  --combined-details-csv data/combined_data_jd200_1.csv \
+  --combined-dist-matrix-csv data/distance_matrix_jd200_1.csv \
+  --combined-time-matrix-csv data/time_matrix_jd200_1.csv \
+  --customer-num 5 \
+  --charging-stations-num 3 \
+  --ev-num 2 \
+  --iterations 1 \
+  --only-rl \
+  --run-baseline \
+  --baseline-print-route-trace \
+  --baseline-print-charging-events \
+  --opt-rl-extra "--print-solution --save-model --seed 111 --rl-algo pomo --baseline shared --pomo-num-starts 16 --pomo-num-augment 8 --decode-type beam_search --decode-beam-width 16" \
+  --opt-heu-extra "--random-seed 123" \
+  --clear-rl-checkpoints
+
+
+POMO (RL Algo) + Beam search (decoder):
+  python3 convoy_main.py \
+  --combined-details-csv data/combined_data_jd200_1.csv \
+  --combined-dist-matrix-csv data/distance_matrix_jd200_1.csv \
+  --combined-time-matrix-csv data/time_matrix_jd200_1.csv \
+  --customer-num 10 \
+  --charging-stations-num 5 \
+  --ev-num 2 \
+  --cost-weight 2.0 \
+  --iterations 1 \
+  --only-rl \
+  --run-baseline \
+  --baseline-print-route-trace \
+  --baseline-print-charging-events \
+  --opt-rl-extra "--print-solution --save-model --seed 111 --rl-algo pomo --baseline shared --pomo-num-starts 16 --pomo-num-augment 8 --decode-type beam_search --decode-beam-width 16" \
+  --opt-heu-extra "--random-seed 123" \
+  --clear-rl-checkpoints
+
+
+
+REINFORCE (RL Algo) + Beam search (decoder):
+python3 convoy_main.py \
+  --combined-details-csv data/combined_data_jd200_1.csv \
+  --combined-dist-matrix-csv data/distance_matrix_jd200_1.csv \
+  --combined-time-matrix-csv data/time_matrix_jd200_1.csv \
+  --customer-num 10 \
+  --charging-stations-num 5 \
+  --ev-num 2 \
+  --cost-weight 2.0 \
+  --iterations 1 \
+  --only-rl \
+  --run-baseline \
+  --baseline-print-route-trace \
+  --baseline-print-charging-events \
+  --opt-rl-extra "--print-solution --save-model --seed 111 --rl-algo am --baseline rollout --decode-type beam_search --decode-beam-width 16" \
+  --opt-heu-extra "--random-seed 123" \
+  --clear-rl-checkpoints
+
+
+
+python3 convoy_main.py \
+  --combined-details-csv data/combined_data_jd200_1.csv \
+  --combined-dist-matrix-csv data/distance_matrix_jd200_1.csv \
+  --combined-time-matrix-csv data/time_matrix_jd200_1.csv \
+  --customer-num 10 \
+  --charging-stations-num 5 \
+  --ev-num 2 \
+  --cost-weight 2.0 \
+  --iterations 15 \
+  --results-file result_seed_111_111_cust10.csv \
+  --only-rl \
+  --run-baseline \
+  --baseline-print-route-trace \
+  --baseline-print-charging-events \
+  --opt-rl-extra "--print-solution --save-model --seed 111 --rl-algo pomo --baseline shared --pomo-num-starts 16 --pomo-num-augment 8 --decode-type beam_search --decode-beam-width 16" \
+  --opt-heu-extra "--random-seed 111"
+
+
+better result using weight 3
+python3 convoy_main.py   --combined-details-csv data/combined_data_jd200_1.csv   --combined-dist-matrix-csv data/distance_matrix_jd200_1.csv   --combined-time-matrix-csv data/time_matrix_jd200_1.csv   --customer-num 10   --charging-stations-num 5   --ev-num 2   --cost-weight 3.0   --iterations 5   --results-file result_seed_111_111_cust10_2.csv   --only-rl   --run-baseline   --baseline-print-route-trace   --baseline-print-charging-events   --opt-rl-extra "--print-solution --save-model --seed 111 --rl-algo pomo --baseline shared --pomo-num-starts 16 --pomo-num-augment 8 --decode-type beam_search --decode-beam-width 16" --clear-rl-checkpoints
+
+
+best till now: 400 epochs, weight 3
+python3 convoy_main.py   --combined-details-csv data/combined_data_jd200_1.csv   --combined-dist-matrix-csv data/distance_matrix_jd200_1.csv   --combined-time-matrix-csv data/time_matrix_jd200_1.csv   --customer-num 10   --charging-stations-num 5   --ev-num 2   --cost-weight 3.0   --iterations 5   --results-file result_seed_111_111_cust10_e400_all.csv   --run-baseline   --baseline-print-route-trace   --baseline-print-charging-events   --opt-rl-extra "--print-solution --save-model --seed 111 --epochs 400 --rl-algo pomo --baseline shared --pomo-num-starts 16 --pomo-num-augment 8 --decode-type beam_search --decode-beam-width 16"   --opt-heu-extra "--random-seed 111 --skip-optimal"   --clear-rl-checkpoints
+
+
+
+python3 convoy_main.py   --combined-details-csv data/combined_data_jd200_1.csv   --combined-dist-matrix-csv data/distance_matrix_jd200_1.csv   --combined-time-matrix-csv data/time_matrix_jd200_1.csv   --customer-num 10   --charging-stations-num 3   --ev-num 2   --cost-weight 2.0   --itera
+tions 5   --results-file result_seed_42_42_cust5_e300_all_w2_v2.csv   --run-baseline   --baseline-print-route-trace   --baseline-print-charging-events   --opt-rl-
+extra "--print-solution --save-model --seed 42 --epochs 300 --rl-algo pomo --baseline shared --pomo-num-starts 10 --pomo-num-augment 8 --decode-type beam_search -
+-decode-beam-width 10"   --opt-heu-extra "--random-seed 42 --skip-optimal"   --clear-rl-checkpoints
+
+
+
+running good for 500 epochs
+python3 convoy_main.py   --combined-details-csv data/combined_data_jd200_1.csv   --combined-dist-matrix-csv data/distance_matrix_jd200_1.csv   --combined-time-matrix-csv data/time_matrix_jd200_1.csv   --customer-num 10   --charging-stations-num 3   --ev-num 2   --cost-weight 3.0   --iterations 15   --results-file result_seed_42_42_cust10_e500_all_w3_v3.csv   --run-baseline   --baseline-print-route-trace   --baseline-print-charging-events   --opt-rl-extra "--print-solution --save-model --seed 42 --epochs 500 --rl-algo pomo --baseline shared --pomo-num-starts 10 --pomo-num-augment 8 --decode-type beam_search --decode-beam-width 10"   --opt-heu-extra "--random-seed 42 --skip-optimal"   --clear-rl-checkpoints
+
+
+
+
+/home/akkcm/myenv/bin/python tests/test_convoy_hybrid.py   --combined-details-csv data/combined_data_jd200_1.csv   --combined-dist-matrix-csv data/distance_matrix_jd200_1.csv   --combined-time-matrix-csv data/time_matrix_jd200_1.csv   --test-csv data/test_instance.csv   --test-distance-matrix-csv data/distance_matrix_jd200_1.csv   --test-time-matrix-csv data/time_matrix_jd200_1.csv   --customer-num 20 --ev-num 8   --epochs 100   --fixed-eval-every 5   --seed 111   --print-solution
+
+
+Run convoy_hybrid only:
+/home/akkcm/myenv/bin/python tests/test_convoy_hybrid.py \
+  --combined-details-csv data/combined_data_jd200_1.csv \
+  --combined-dist-matrix-csv data/distance_matrix_jd200_1.csv \
+  --combined-time-matrix-csv data/time_matrix_jd200_1.csv \
+  --test-csv data/test_instance_50c_10cp.csv \
+  --test-distance-matrix-csv data/distance_matrix_jd200_1.csv \
+  --test-time-matrix-csv data/time_matrix_jd200_1.csv \
+  --customer-num 50 \
+  --charging-stations-num 10 \
+  --ev-num 10 \
+  --epochs 100 \
+  --fixed-eval-every 5 \
+  --seed 111 \
+  --print-solution
+
+
+Run heuristic CSA, EDF, NDF
+/home/akkcm/myenv/bin/python convoy_main.py \
+  --combined-details-csv data/combined_data_jd200_1.csv \
+  --combined-dist-matrix-csv data/distance_matrix_jd200_1.csv \
+  --combined-time-matrix-csv data/time_matrix_jd200_1.csv \
+  --test-for-opt-heu data/test_instance_50c_10cp.csv \
+  --customer-num 50 \
+  --charging-stations-num 10 \
+  --ev-num 10 \
+  --only-opt-heu \
+  --iterations 1 \
+  --results-file heu_ndf_edf_test50c10cp.csv \
+  --opt-heu-extra "--skip-optimal --random-seed 111"

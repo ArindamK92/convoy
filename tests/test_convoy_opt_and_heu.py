@@ -1,3 +1,5 @@
+"""Test/runner shim that invokes Opt+Heu main from the tests folder."""
+
 import os
 import sys
 

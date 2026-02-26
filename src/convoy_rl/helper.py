@@ -95,6 +95,9 @@ def build_customer_visit_trace(
         charge_cost_per_kwh_per_node = td_state["charge_cost_per_kwh_per_node"][0]
     else:
         charge_cost_per_kwh_per_node = torch.zeros(dist_matrix.shape[0], dtype=torch.float32)
+        charge_cost_per_kwh_per_node[0] = float(
+            getattr(env, "depot_charge_cost_per_kwh", 0.0)
+        )
     if "cp_id_per_node" in td_state.keys():
         cp_id_per_node = td_state["cp_id_per_node"][0]
     else:
@@ -103,8 +106,16 @@ def build_customer_visit_trace(
         customer_reward_per_node = td_state["customer_reward_per_node"][0]
     else:
         customer_reward_per_node = torch.zeros(dist_matrix.shape[0], dtype=torch.float32)
+    if "global_node_ids" in td_state.keys():
+        global_node_ids = td_state["global_node_ids"][0].to(torch.long)
+    else:
+        global_node_ids = torch.arange(
+            dist_matrix.shape[0], dtype=torch.long, device=dist_matrix.device
+        )
 
-    battery_cap = float(env.battery_capacity_kwh)
+    battery_cap = float(
+        getattr(env, "effective_battery_kwh", env.battery_capacity_kwh)
+    )
     energy_rate = float(env.energy_rate_kwh_per_distance)
     num_evs = int(env.num_evs)
     time_units_per_hour = float(env.time_units_per_hour)
@@ -122,15 +133,28 @@ def build_customer_visit_trace(
         if node < 0 or node >= int(dist_matrix.shape[0]):
             continue
 
+        prev_node = int(current_node)
+        prev_node_id = (
+            int(global_node_ids[prev_node].item())
+            if 0 <= prev_node < int(global_node_ids.shape[0])
+            else prev_node
+        )
+        node_id = (
+            int(global_node_ids[node].item())
+            if 0 <= node < int(global_node_ids.shape[0])
+            else node
+        )
         travel_dist = float(dist_matrix[current_node, node].item())
         travel_time = float(travel_matrix[current_node, node].item())
+        energy_used = max(0.0, travel_dist * energy_rate)
         arrival_time = current_time + travel_time
         service_start = max(arrival_time, float(tw_starts[node].item()))
         on_time = service_start <= (float(tw_ends[node].item()) + 1e-6)
-        soc_after_arrival = max(current_soc - (travel_dist * energy_rate), 0.0)
+        soc_after_arrival = max(current_soc - energy_used, 0.0)
 
         is_charge_node = bool(charge_nodes_mask[node].item())
         is_station = bool(station_mask[node].item())
+        charge_needed = 0.0
         if is_charge_node:
             selected_rate = max(float(charge_rate_per_node[node].item()), 1e-6)
             charge_needed = max(battery_cap - soc_after_arrival, 0.0)
@@ -142,6 +166,31 @@ def build_customer_visit_trace(
             soc_after_depart = soc_after_arrival
 
         if node == 0:
+            # Include depot charging in reward/cost decomposition so CSV totals
+            # match the environment reward definition.
+            depot_charge_cost = float(charge_cost_per_kwh_per_node[node].item())
+            depot_step_reward = -(charge_needed * depot_charge_cost)
+            if charge_needed > 1e-9:
+                trace.append(
+                    {
+                        "step": step_idx,
+                        "node_type": "cp",
+                        "node_id": node_id,
+                        "node_local_idx": node,
+                        "from_node_id": prev_node_id,
+                        "from_local_idx": prev_node,
+                        "vehicle_id": current_vehicle_idx + 1,
+                        "arrival_time": arrival_time,
+                        "depart_time": depart_time,
+                        "travel_distance": travel_dist,
+                        "energy_used_kwh": energy_used,
+                        "soc_kwh": soc_after_arrival,
+                        "step_reward": depot_step_reward,
+                        "on_time": False,
+                        "first_visit": False,
+                        "successful_delivery": False,
+                    }
+                )
             vehicle_ready_times[current_vehicle_idx] = depart_time
             current_vehicle_idx = min(
                 range(num_evs), key=lambda idx: vehicle_ready_times[idx]
@@ -159,14 +208,20 @@ def build_customer_visit_trace(
                 if node < int(cp_id_per_node.shape[0])
                 else -1
             )
+            cp_id = cp_id if cp_id >= 0 else node_id
             trace.append(
                 {
                     "step": step_idx,
                     "node_type": "cp",
-                    "node_id": cp_id if cp_id >= 0 else node,
+                    "node_id": cp_id,
+                    "node_local_idx": node,
+                    "from_node_id": prev_node_id,
+                    "from_local_idx": prev_node,
                     "vehicle_id": current_vehicle_idx + 1,
                     "arrival_time": arrival_time,
                     "depart_time": depart_time,
+                    "travel_distance": travel_dist,
+                    "energy_used_kwh": energy_used,
                     "soc_kwh": soc_after_arrival,
                     "step_reward": step_reward,
                     "on_time": False,
@@ -185,10 +240,15 @@ def build_customer_visit_trace(
                 {
                     "step": step_idx,
                     "node_type": "customer",
-                    "node_id": node,
+                    "node_id": node_id,
+                    "node_local_idx": node,
+                    "from_node_id": prev_node_id,
+                    "from_local_idx": prev_node,
                     "vehicle_id": current_vehicle_idx + 1,
                     "arrival_time": arrival_time,
                     "depart_time": depart_time,
+                    "travel_distance": travel_dist,
+                    "energy_used_kwh": energy_used,
                     "soc_kwh": soc_after_arrival,
                     "step_reward": step_reward,
                     "on_time": bool(on_time),
@@ -291,15 +351,21 @@ def print_one_solution_from_instance(
             print(f"  {route_name}: {route}")
             print(f"             {labels}")
     if visit_trace:
-        print("Visit trace (customer + CP; time units match TW/travel-time inputs):")
+        print("Visit trace (customer + CP; includes distance + energy per step):")
         for rec in visit_trace:
             if rec["node_type"] == "cp":
-                node_txt = f"cp={rec['node_id']:>3d}"
+                if int(rec.get("node_local_idx", -1)) == 0:
+                    node_txt = f"depot_id={int(rec['node_id']):>3d}"
+                else:
+                    node_txt = f"cp_id={int(rec['node_id']):>3d}"
             else:
-                node_txt = f"customer={rec['node_id']:>3d}"
+                node_txt = f"customer_id={int(rec['node_id']):>3d}"
             print(
                 f"  step={rec['step']:>3d} {node_txt} "
                 f"vehicle={rec['vehicle_id']:>2d} "
+                f"from_id={int(rec.get('from_node_id', -1)):>3d} "
+                f"dist={float(rec.get('travel_distance', 0.0)):.2f} "
+                f"energy={float(rec.get('energy_used_kwh', 0.0)):.2f}kWh "
                 f"arrival={rec['arrival_time']:.2f} "
                 f"depart={rec['depart_time']:.2f} "
                 f"soc={rec['soc_kwh']:.2f}kWh "
@@ -323,7 +389,7 @@ def print_one_solution_from_instance(
         f"total_reward={customer_reward_sum:.6f}, "
         f"total_cost={charging_cost_sum:.6f}, "
         f"successful_delivery={total_successful_delivery}, "
-        f"objective={reward:.6f}"
+                f"objective={reward:.6f}"
     )
     if return_details:
         return {
