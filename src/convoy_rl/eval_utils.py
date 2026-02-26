@@ -24,7 +24,7 @@ def evaluate_policy_on_dataset(
     dataset,
     batch_size: int,
 ) -> float:
-    """Compute mean reward of a model on a given dataset with greedy decoding."""
+    """Compute mean reward on dataset using raw decoded policy reward."""
     was_training = model.training
     model.eval()
     rewards = []

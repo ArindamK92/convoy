@@ -1,3 +1,5 @@
+"""Baseline dispatch policies used by the Optimal+Heuristic module."""
+
 import time 
 # import random
 
@@ -20,11 +22,12 @@ def NDF(cp, deliveries, theta, C, D, E, tau_start, tau_end, nS, EVs, gamma_DD, p
     sorted_deliveries = sorted(deliveries, key=lambda x: psi_DC[(x.local_id, 0)])
     for delivery in sorted_deliveries:
         d_id = delivery.local_id
+        service_time_d = float(getattr(delivery, "service_time", 0.0))
         # print("cluster:", c_id, " delivery: ", d_id, "delivery start time: ", tau_start[d_id])
         
         energy_cost_min = 9999999 # cost is measured in terms of energy used
         assigned_EV = None
-        time_req_for_delivery = -1
+        departure_after_service = -1
         for e in EVs:
             # if e.totalSubtrip >= max_subtrip_per_EV:
             #     print("Max delivery reached. EV: ", e.local_id)
@@ -53,18 +56,25 @@ def NDF(cp, deliveries, theta, C, D, E, tau_start, tau_end, nS, EVs, gamma_DD, p
                     nearest_cp_id_from_last_point = last_loc.nearest_CP_local_id
                     e_id = e.local_id
                     e.A.append(cp[nearest_cp_id_from_last_point])
-                    req_charge = beta_f - e.B_res - psi_DC[(last_loc.local_id, nearest_cp_id_from_last_point)]
+                    energy_to_cp = psi_DC[(last_loc.local_id, nearest_cp_id_from_last_point)]
+                    soc_at_cp = e.B_res - energy_to_cp
+                    req_charge = max(beta_f - soc_at_cp, 0.0)
                     e.T.append(e.t_ed)
-                    e.t_ed = gamma_DC[(last_loc.local_id, nearest_cp_id_from_last_point)] +  req_charge/min(rateE[e_id], rateC[nearest_cp_id_from_last_point]) # reaching time + charging time
+                    e.t_ed = (
+                        e.t_ed
+                        + gamma_DC[(last_loc.local_id, nearest_cp_id_from_last_point)]
+                        + req_charge / min(rateE[e_id], rateC[nearest_cp_id_from_last_point])
+                    )  # accumulated time + reaching time + charging time
                     e.B_res = beta_f # reset battery
                     e.B_trace.append(beta_f)
                 continue
             
             reaching_time = e.t_ed + duration_lastLoc2delivery
-            if reaching_time <= tau_end[d_id]:
+            service_start = max(reaching_time, tau_start[d_id])
+            if (service_start + service_time_d) <= tau_end[d_id]:
                 assigned_EV = e
                 energy_cost_min = energy_req
-                time_req_for_delivery = duration_lastLoc2delivery
+                departure_after_service = service_start + service_time_d
                 break
         if assigned_EV != None:
             delivery.assigned_EV = assigned_EV
@@ -76,9 +86,7 @@ def NDF(cp, deliveries, theta, C, D, E, tau_start, tau_end, nS, EVs, gamma_DD, p
             t_dep = t_ed # As there is no sensing start time
             assigned_EV.A.append(delivery)
             assigned_EV.T.append(t_dep)
-            #assigned_EV.t_ed = max((t_dep +  time_req_for_delivery),  tau_end[d_id]) # old version
-            assigned_EV.t_ed = min(max((t_dep +  time_req_for_delivery), tau_start[d_id]), tau_end[d_id])# earliest departure time at the delivery waypoint ## AK: New change
-            #assigned_EV.t_ed = (t_dep +  time_req_for_delivery) # if only deadline exists. no slot start time
+            assigned_EV.t_ed = departure_after_service
             
             # assigned_EV.totalEnergyUsed = assigned_EV.totalEnergyUsed + energy_req_for_delivery
             B_res = assigned_EV.B_res - energy_cost_min
@@ -113,6 +121,7 @@ def NDF(cp, deliveries, theta, C, D, E, tau_start, tau_end, nS, EVs, gamma_DD, p
     total_deliveries_completed = 0
     total_cost = 0
     total_energy = 0
+    total_reward = 0
     delivery_distribution = {}
     for e in EVs:
         A = e.A
@@ -126,6 +135,7 @@ def NDF(cp, deliveries, theta, C, D, E, tau_start, tau_end, nS, EVs, gamma_DD, p
             energy_req = 0
             if loc.type == "delivery":
                 delivery_done += 1
+                total_reward += float(getattr(loc, "reward", 0.0))
                 if last_loc.type == "delivery":
                     energy_req = psi_DD[(last_loc.local_id, loc.local_id)]
                 else:
@@ -150,7 +160,9 @@ def NDF(cp, deliveries, theta, C, D, E, tau_start, tau_end, nS, EVs, gamma_DD, p
     print("****NDF****")          
     # print("Total delivery: ", nD, " Total CP: ", nC+1, " Total EV: ", nE, " Time slot max: ", time_slot_max, " delivery2ev_ratio: ", delivery2ev_ratio)          
     print(f"Elapsed time: {elapsed_time:.2f} ms")
+    print(f"Total Reward: {total_reward}")
     print(f"Total cost: {total_cost}")
+    print("Objective val: ", (total_reward - total_cost))
     print(f"Total successful delivery: {total_deliveries_completed}")
     print("::Delivery Distribution::")
     for j in E:
@@ -158,7 +170,7 @@ def NDF(cp, deliveries, theta, C, D, E, tau_start, tau_end, nS, EVs, gamma_DD, p
     # print(EVs[1].A)
     # print(rateE[0])
     
-    return elapsed_time, total_cost, total_deliveries_completed
+    return elapsed_time, total_cost, total_reward, total_deliveries_completed
     
     
     
@@ -177,11 +189,12 @@ def EDF(cp, deliveries, theta, C, D, E, tau_start, tau_end, nS, EVs, gamma_DD, p
     sorted_deliveries = sorted(deliveries, key=lambda x: tau_end[x.local_id])
     for delivery in sorted_deliveries:
         d_id = delivery.local_id
+        service_time_d = float(getattr(delivery, "service_time", 0.0))
         # print("cluster:", c_id, " delivery: ", d_id, "delivery start time: ", tau_start[d_id])
         
         energy_cost_min = 9999999 # cost is measured in terms of energy used
         assigned_EV = None
-        time_req_for_delivery = -1
+        departure_after_service = -1
         for e in EVs:
             
             last_loc = e.A[-1]
@@ -207,18 +220,25 @@ def EDF(cp, deliveries, theta, C, D, E, tau_start, tau_end, nS, EVs, gamma_DD, p
                     nearest_cp_id_from_last_point = last_loc.nearest_CP_local_id
                     e_id = e.local_id
                     e.A.append(cp[nearest_cp_id_from_last_point])
-                    req_charge = beta_f - e.B_res - psi_DC[(last_loc.local_id, nearest_cp_id_from_last_point)]
+                    energy_to_cp = psi_DC[(last_loc.local_id, nearest_cp_id_from_last_point)]
+                    soc_at_cp = e.B_res - energy_to_cp
+                    req_charge = max(beta_f - soc_at_cp, 0.0)
                     e.T.append(e.t_ed)
-                    e.t_ed = gamma_DC[(last_loc.local_id, nearest_cp_id_from_last_point)] +  req_charge/min(rateE[e_id], rateC[nearest_cp_id_from_last_point]) # reaching time + charging time
+                    e.t_ed = (
+                        e.t_ed
+                        + gamma_DC[(last_loc.local_id, nearest_cp_id_from_last_point)]
+                        + req_charge / min(rateE[e_id], rateC[nearest_cp_id_from_last_point])
+                    )  # accumulated time + reaching time + charging time
                     e.B_res = beta_f # reset battery
                     e.B_trace.append(beta_f)
                 continue
             
             reaching_time = e.t_ed + duration_lastLoc2delivery
-            if reaching_time <= tau_end[d_id]:
+            service_start = max(reaching_time, tau_start[d_id])
+            if (service_start + service_time_d) <= tau_end[d_id]:
                 assigned_EV = e
                 energy_cost_min = energy_req
-                time_req_for_delivery = duration_lastLoc2delivery
+                departure_after_service = service_start + service_time_d
                 break
         if assigned_EV != None:
             delivery.assigned_EV = assigned_EV
@@ -230,9 +250,7 @@ def EDF(cp, deliveries, theta, C, D, E, tau_start, tau_end, nS, EVs, gamma_DD, p
             t_dep = t_ed # As there is no sensing start time
             assigned_EV.A.append(delivery)
             assigned_EV.T.append(t_dep)
-            #assigned_EV.t_ed = max((t_dep +  time_req_for_delivery),  tau_end[d_id]) # old version
-            assigned_EV.t_ed = min(max((t_dep +  time_req_for_delivery), tau_start[d_id]), tau_end[d_id])# earliest departure time at the delivery waypoint ## AK: New change
-            #assigned_EV.t_ed = (t_dep +  time_req_for_delivery) # if only deadline exists. no slot start time
+            assigned_EV.t_ed = departure_after_service
             
             # assigned_EV.totalEnergyUsed = assigned_EV.totalEnergyUsed + energy_req_for_delivery
             B_res = assigned_EV.B_res - energy_cost_min
@@ -267,6 +285,7 @@ def EDF(cp, deliveries, theta, C, D, E, tau_start, tau_end, nS, EVs, gamma_DD, p
     total_deliveries_completed = 0
     total_cost = 0
     total_energy = 0
+    total_reward = 0
     delivery_distribution = {}
     for e in EVs:
         A = e.A
@@ -280,6 +299,7 @@ def EDF(cp, deliveries, theta, C, D, E, tau_start, tau_end, nS, EVs, gamma_DD, p
             energy_req = 0
             if loc.type == "delivery":
                 delivery_done += 1
+                total_reward += float(getattr(loc, "reward", 0.0))
                 if last_loc.type == "delivery":
                     energy_req = psi_DD[(last_loc.local_id, loc.local_id)]
                 else:
@@ -304,7 +324,9 @@ def EDF(cp, deliveries, theta, C, D, E, tau_start, tau_end, nS, EVs, gamma_DD, p
     print("****EDF****")          
     # print("Total delivery: ", nD, " Total CP: ", nC+1, " Total EV: ", nE, " Time slot max: ", time_slot_max, " delivery2ev_ratio: ", delivery2ev_ratio)          
     print(f"Elapsed time: {elapsed_time:.4f} ms")
+    print(f"Total Reward: {total_reward}")
     print(f"Total cost: {total_cost}")
+    print("Objective val: ", (total_reward - total_cost))
     print(f"Total successful delivery: {total_deliveries_completed}")
     # print("::Delivery Distribution::")
     for j in E:
@@ -312,4 +334,4 @@ def EDF(cp, deliveries, theta, C, D, E, tau_start, tau_end, nS, EVs, gamma_DD, p
     # print(EVs[1].A)
     # print(rateE[0])
     
-    return elapsed_time, total_cost, total_deliveries_completed
+    return elapsed_time, total_cost, total_reward, total_deliveries_completed

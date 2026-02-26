@@ -1,3 +1,5 @@
+"""Spatial utility helpers for nearest charging-point lookups."""
+
 import random
 import math
 import time
@@ -9,7 +11,7 @@ random.seed(time.time())
 
 def create_kd_tree(cp, C, theta, min_lat, max_lat, min_lon, max_lon, min_theta, max_theta, denom_lat, denom_lon, denom_theta):
     """
-    Create a KD-Tree from a list of Fog objects
+    Create a KD-Tree from a list of CP objects
     """
     # lats = [c.latitude for c in cp[1:]] # first cp is the depot
     # lons = [c.longitude for c in cp[1:]]
@@ -38,8 +40,7 @@ def find_nearest_cp(kd_tree, loc_lat, loc_lon, min_lat, max_lat, min_lon, max_lo
     Parameters
     ----------
     kd_tree : TYPE
-    static_fogs : TYPE
-        A list of static fogs on which the KD-tree is built.
+        KD-tree built on charging points (excluding depot).
     loc_lat : TYPE
         Latitude of the waypoint.
     loc_lon : TYPE
@@ -47,10 +48,10 @@ def find_nearest_cp(kd_tree, loc_lat, loc_lon, min_lat, max_lat, min_lon, max_lo
 
     Returns
     -------
-    nearest_fog : TYPE
-        Nearest Fog of the waypoint.
-    haversine_distance : TYPE
-        Distance from the waypoint to the fog in Km.
+    nearest_cp : TYPE
+        Nearest CP of the waypoint.
+    distance : TYPE
+        Distance from the waypoint to the CP in normalized feature space.
 
     """
     # Query the KD-Tree for the nearest neighbor to the waypoint

@@ -1,3 +1,5 @@
+"""Gurobi MILP model construction and solve utilities for CONVOY2."""
+
 import gurobipy as gp
 from gurobipy import GRB
 # import math
@@ -84,11 +86,23 @@ def MILP(
     rateC,
     alpha1,
     alpha2,
+    reserve_battery=0.0,
+    gamma_C0=None,
+    psi_C0=None,
     return_objective=False,
 ):
-    
-    
-    resB = 5 # reserve battery 5 kWh
+    resB = float(reserve_battery)  # reserve battery in kWh
+    if resB < 0:
+        raise ValueError("reserve_battery must be >= 0.")
+    if resB >= beta_f:
+        raise ValueError("reserve_battery must be smaller than full battery.")
+    service_time_D = {
+        int(d.local_id): float(getattr(d, "service_time", 0.0)) for d in deliveries
+    }
+    if gamma_C0 is None:
+        gamma_C0 = {}
+    if psi_C0 is None:
+        psi_C0 = {}
     
     
     objective_value = 0
@@ -101,6 +115,8 @@ def MILP(
         start_time = time.time()
         chiCD = model.addVars(C1, D, E, S, vtype=GRB.BINARY, name="chiCD") # Decision var for edge b/w C and D
         chiDC = model.addVars(D, C1, E, S, vtype=GRB.BINARY, name="chiDC")
+        # Optional direct return from CP -> depot (0) at the end of a subtrip.
+        chiC0 = model.addVars(C, E, S, vtype=GRB.BINARY, name="chiC0")
         chiDD = model.addVars(D, D, E, S, vtype=GRB.BINARY, name="chiDD")
 
         TarrC = model.addVars(C1, E, S, vtype=GRB.CONTINUOUS, lb=0, ub= GRB.INFINITY, name="arrival_time_at_C")
@@ -118,6 +134,12 @@ def MILP(
         SoC = model.addVars(E, S, vtype=GRB.CONTINUOUS, lb=0, ub= beta_f, name="SoC")       # State of Charge  
         reqCh = model.addVars(E, S, vtype=GRB.CONTINUOUS, lb=0, ub= beta_f, name="req partial Charge")       # required partial Charge \rho
         _lambda = model.addVars(D, C1, E, S, vtype=GRB.BINARY, name="lambda")
+        # 1 when EV j returns to depot at the end of subtrip l.
+        return_to_depot = model.addVars(E, S, vtype=GRB.BINARY, name="return_to_depot")
+        # Recharge amount at depot right after the final returning subtrip.
+        final_depot_charge = model.addVars(
+            E, S, vtype=GRB.CONTINUOUS, lb=0, ub=beta_f, name="final_depot_charge"
+        )
 
 
         #obj = model.addVar(lb=0, name="obj")  # lb=0 ensures Z is non-negative
@@ -137,9 +159,12 @@ def MILP(
         for j in E:
             for l in S:
                 for x in D:
-                    for y in C1:
+                    for y in C:
                         term0_component = chiDC[x, y, j, l] * theta[y]  # This is symbolic during model building
                         objective -= term0_component * reqCh[j, l] * alpha2
+        for j in E:
+            for l in S:
+                objective -= theta[0] * final_depot_charge[j, l] * alpha2
         
         # for j in E:
         #     for l in S:
@@ -272,10 +297,36 @@ def MILP(
             for l in S:
                 for x in D:
                     constraint6 += chiDC[x, 0, j, l]
-            model.addConstr(constraint6 <= 1, name=f"c5_{j}_{l}")
+                for c in C:
+                    constraint6 += chiC0[c, j, l]
+            model.addConstr(constraint6 <= 1, name=f"c6_{j}_{l}")
 
                 # Add the constraint to the model: constraint3 == 0
-            model.addConstr(constraint5 - constraint6 == 0, name=f"c5_{j}_{l}")
+            model.addConstr(constraint5 - constraint6 == 0, name=f"c7_{j}_{l}")
+        
+        # CP -> depot direct return can be used only when that subtrip ended at the same CP.
+        for j in E:
+            for l in S:
+                for c in C:
+                    model.addConstr(
+                        chiC0[c, j, l]
+                        <= gp.quicksum(chiDC[x, c, j, l] for x in D),
+                        name=f"cp_to_depot_link_{c}_{j}_{l}",
+                    )
+                    model.addConstr(
+                        chiC0[c, j, l] <= z_notIsEmptySubRoute[j, l],
+                        name=f"cp_to_depot_nonempty_{c}_{j}_{l}",
+                    )
+
+        # Track which subtrip returns to depot (either D->depot or CP->depot).
+        for j in E:
+            for l in S:
+                model.addConstr(
+                    return_to_depot[j, l]
+                    == gp.quicksum(chiDC[x, 0, j, l] for x in D)
+                    + gp.quicksum(chiC0[c, j, l] for c in C),
+                    name=f"return_to_depot_def_{j}_{l}",
+                )
             
         
         # Constraint 8: An EV visiting a CP in trip 'l' should also come out from there at trip 'l+1'(Eq. 13)
@@ -287,6 +338,8 @@ def MILP(
                     for y in D:   
                         constraint8A += chiDC[y, x, j, (l-1)]
                         constraint8B += chiCD[x, y, j, l]
+                    # If CP->depot return is taken at l-1, no need to start l from same CP.
+                    constraint8A -= chiC0[x, j, (l-1)]
             
                     # Add the constraint to the model: constraint3 == 0
                     model.addConstr(constraint8A == constraint8B, name=f"c8_{j}_{l}")
@@ -300,7 +353,7 @@ def MILP(
         #         model.addConstr(constraint9 <= 0, name=f"c9_{j}_{l}")
         
         
-        # Depot Constraint 1: A EV must start its first subtrip from the depot (fog 0)
+        # Depot Constraint 1: An EV must start its first subtrip from the depot (CP 0)
         for j in E:
             depotConstraint1 = gp.LinExpr()
         
@@ -327,6 +380,8 @@ def MILP(
                     for y in D:
                         if x != y:
                             constraint10 += chiDD[x, y, j, l] * psi_DD[(x, y)]
+                for c in C:
+                    constraint10 += chiC0[c, j, l] * psi_C0.get(c, 0.0)
                             
                 # Add the constraint to the model: all energy ensumption for a subtrip <= beta_f
                 model.addConstr(reqB[j, l] == constraint10, name=f"energy_constraint1_{j}_{l}")
@@ -340,6 +395,25 @@ def MILP(
                 model.addConstr(reqB[j, l] + resB <= SoC[j,l] , name=f"energy_constraint2_{j}_{l}")
                 if l > 0:
                     model.addConstr(reqCh[j, l] == SoC[j,l] - (SoC[j,(l-1)] - reqB[j, (l-1)]) , name=f"energy_constraint3_{j}_{l}")
+
+        # Linearize final depot recharge:
+        # final_depot_charge = return_to_depot * (beta_f - (SoC - reqB))
+        for j in E:
+            for l in S:
+                recharge_need = beta_f - SoC[j, l] + reqB[j, l]
+                model.addConstr(
+                    final_depot_charge[j, l] <= recharge_need,
+                    name=f"final_depot_charge_ub_need_{j}_{l}",
+                )
+                model.addConstr(
+                    final_depot_charge[j, l] <= beta_f * return_to_depot[j, l],
+                    name=f"final_depot_charge_ub_ret_{j}_{l}",
+                )
+                model.addConstr(
+                    final_depot_charge[j, l]
+                    >= recharge_need - beta_f * (1 - return_to_depot[j, l]),
+                    name=f"final_depot_charge_lb_{j}_{l}",
+                )
                 
                 
         # Time Constraints
@@ -367,14 +441,17 @@ def MILP(
         
         
         for y in D:
-            # # If we have just the deadline of delivery
-            # model.addConstr(TarrD[y] <= tau_end[y], name=f"time_constraint4C_{y}") 
-            # model.addConstr(TdepD[y] >= TarrD[y], name=f"time_constraint4A_{y}")
-            
-            # If we have time slot (both upper and lower time limit) for delivery
-            model.addConstr(TdepD[y] >= TarrD[y], name=f"time_constraint4A_{y}")
-            model.addConstr(TdepD[y] >= tau_start[y], name=f"time_constraint4B_{y}")
-            model.addConstr(TdepD[y] <= tau_end[y], name=f"time_constraint4C_{y}")
+            # Service starts at max(arrival_time, tau_start) and must start before tau_end.
+            # Departure is service start + service_time.
+            model.addConstr(TarrD[y] <= tau_end[y], name=f"time_constraint4A_{y}")
+            model.addConstr(
+                TdepD[y] >= TarrD[y] + service_time_D.get(y, 0.0),
+                name=f"time_constraint4B_{y}",
+            )
+            model.addConstr(
+                TdepD[y] >= tau_start[y] + service_time_D.get(y, 0.0),
+                name=f"time_constraint4C_{y}",
+            )
         
         for j in E:
             for l in range(1, len(S)):
@@ -449,11 +526,12 @@ def MILP(
             for j in E:
                 for l in S:
                     for x in D:
-                        for y in C1:
+                        for y in C:
                             if chiDC[x, y, j, l].x > 0.5:
                                 if DEBUG:
                                     print("charged: ", j, l, x, y)
                                 total_cost += theta[y] * reqCh[j, l].x  # This is symbolic during model building
+                    total_cost += theta[0] * final_depot_charge[j, l].x
                                 
                                 
                                 

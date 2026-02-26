@@ -92,6 +92,9 @@ def parse_customer(csv_path: str):
                     "tw_end": _to_float(row_norm.get("last_receive_tm")),
                     "service_time": _to_float(row_norm.get("service_time"), default=0.0),
                     "reward": reward,
+                    "charging_cost_per_kwh": _to_float(
+                        row_norm.get("unit_charging_cost"), default=0.0
+                    ),
                     "customer_id": node_id if node_type == "c" else None,
                     "node_id": node_id,
                 }
@@ -144,6 +147,12 @@ def parse_customer(csv_path: str):
                 "tw_end": _to_float(row_norm.get("tw_end")),
                 "service_time": _to_float(row_norm.get("service_time"), default=0.0),
                 "reward": reward,
+                "charging_cost_per_kwh": _to_float(
+                    row_norm.get("unit_charging_cost")
+                    if str(row_norm.get("unit_charging_cost", "")).strip() != ""
+                    else row_norm.get("charging_cost_per_kwh"),
+                    default=0.0,
+                ),
                 "customer_id": customer_id,
                 "node_id": customer_id if customer_id is not None else 0,
             }
@@ -388,16 +397,30 @@ def build_parser() -> argparse.ArgumentParser:
         ),
     )
     parser.add_argument(
+        "--cost-weight",
+        type=float,
+        default=1.0,
+        help=(
+            "Charging-cost weight in RL reward. "
+            "Reward becomes customer_reward - cost_weight * charging_cost."
+        ),
+    )
+    parser.add_argument(
         "--ev-charge-rate-kwh-per-hour",
         type=float,
         default=120.0,
         help="Charging rate at depot (kWh/hour).",
     )
     parser.add_argument(
+        "--reserve-battery",
         "--ev-reserve-soc-kwh",
+        dest="ev_reserve_soc_kwh",
         type=float,
         default=0.0,
-        help="Reserve SOC that must remain (kWh).",
+        help=(
+            "Reserve battery in kWh. "
+            "Effective usable battery is full battery minus reserve battery."
+        ),
     )
     parser.add_argument(
         "--ev-num",

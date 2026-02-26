@@ -94,6 +94,7 @@ class CSVCustomerPoolGenerator(CVRPTWGenerator):
 
         depot = depot_rows[0]
         self.depot_id = int(depot["id"])
+        self.depot_charge_cost_per_kwh = float(depot["unit_charging_cost"])
         self.cp_rows = [
             {
                 "cp_id": int(r["id"]),

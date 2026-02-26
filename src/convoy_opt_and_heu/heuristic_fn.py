@@ -1,3 +1,5 @@
+"""Legacy heuristic implementation for EV delivery assignment."""
+
 # import pandas as pd
 # import math
 # import os
@@ -35,7 +37,7 @@ def heuristic(cp, deliveries, theta, C, D, E, tau_start, tau_end, nS, EVs, gamma
     denom_theta = max_theta - min_theta
     kd_tree = create_kd_tree(cp, C, theta, min_lat, max_lat, min_lon, max_lon, min_theta, max_theta, denom_lat, denom_lon, denom_theta)
 
-    # Find the nearest fog for each delivery and 
+    # Find the nearest CP for each delivery and 
     # prepare a list of spatio-temporal parameters of the deliveries for ST-DBSCAN 
     deliveries_spatiotemporal_params = []
     min_deadline = min([tau_end[y] for y in D])
@@ -56,7 +58,7 @@ def heuristic(cp, deliveries, theta, C, D, E, tau_start, tau_end, nS, EVs, gamma
     # 
     # eps2 is the temporal threshold (maximum temporal distance) between two 
     # points to be considered related.     
-    ## Avg Euclidean dist among the fog lat lon values: 0.0037424493333129533
+    ## Avg Euclidean dist among the CP lat/lon values: 0.0037424493333129533
 
     # tune eps1 and eps2 depending on the values of  deliveries_spatiotemporal_params
     st_dbscan = ST_DBSCAN(eps1 = 0.2, eps2 = 0.2, min_samples = 1) 

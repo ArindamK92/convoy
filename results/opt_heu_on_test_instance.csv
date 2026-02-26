@@ -1,0 +1,4 @@
+itr,Methods,Total delivery,Total CP,Total EV,delivery2ev_ratio,Elapsed time (ms),Total reward,Total cost,Objective val,Total successful delivery,Avg. cost per successful delivery
+1,CSA,50,20,10,5.0,3.4584999084472656,604,110.98000000000002,493.02,49,2.2648979591836738
+1,NDF,50,20,10,5.0,1.8069744110107422,583.0,155.8917,427.1083,46,3.38895
+1,EDF,50,20,10,5.0,1.7807483673095703,590.0,148.4743,441.52570000000003,47,3.159027659574468

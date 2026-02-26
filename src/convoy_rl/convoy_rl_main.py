@@ -50,6 +50,8 @@ def run_rl(args) -> dict:
         battery_capacity_kwh=args.ev_battery_capacity_kwh,
         energy_rate_kwh_per_distance=args.ev_energy_rate_kwh_per_distance,
         charge_rate_kwh_per_hour=args.ev_charge_rate_kwh_per_hour,
+        cost_weight=args.cost_weight,
+        depot_charge_cost_per_kwh=getattr(pool_generator, "depot_charge_cost_per_kwh", 0.0),
         reserve_soc_kwh=args.ev_reserve_soc_kwh,
         num_evs=args.ev_num,
         charging_pool_rows=getattr(pool_generator, "cp_rows", None),
@@ -168,7 +170,9 @@ def run_rl(args) -> dict:
         f"battery={args.ev_battery_capacity_kwh}kWh, "
         f"energy_rate={args.ev_energy_rate_kwh_per_distance}kWh/dist, "
         f"charge_rate={args.ev_charge_rate_kwh_per_hour}kWh/h, "
+        f"depot_charge_cost={getattr(pool_generator, 'depot_charge_cost_per_kwh', 0.0)}/kWh, "
         f"reserve={args.ev_reserve_soc_kwh}kWh, "
+        f"cost_weight={args.cost_weight}, "
         f"fleet_size={args.ev_num}"
     )
     print(
@@ -208,6 +212,9 @@ def run_rl(args) -> dict:
             distance_matrix_csv=test_dist_csv,
             time_matrix_csv=test_time_csv,
             depot_charge_rate_kwh_per_hour=args.ev_charge_rate_kwh_per_hour,
+            depot_charge_cost_per_kwh=getattr(
+                pool_generator, "depot_charge_cost_per_kwh", 0.0
+            ),
             device=model_for_solution.device,
         )
         infer_start = time.perf_counter()

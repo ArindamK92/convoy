@@ -27,6 +27,7 @@ plugins:
 nav:
   - Home: index.md
   - Quickstart: quickstart.md
+  - Examples: examples.md
   - CLI:
       - Combined Runner (`convoy_main.py`): cli/convoy_main.md
       - RL Test Runner (`tests/test_convoy_CPs1.py`): cli/test_convoy_CPs1.md

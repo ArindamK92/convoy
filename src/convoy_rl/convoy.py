@@ -22,6 +22,8 @@ class convoy(CVRPTWEnv):
         battery_capacity_kwh: float = 30.0,
         energy_rate_kwh_per_distance: float = 0.5,
         charge_rate_kwh_per_hour: float = 120.0,
+        cost_weight: float = 1.0,
+        depot_charge_cost_per_kwh: float = 0.0,
         reserve_soc_kwh: float = 0.0,
         num_evs: int = 1,
         charging_pool_rows: list[dict] | None = None,
@@ -38,6 +40,10 @@ class convoy(CVRPTWEnv):
             raise ValueError("energy_rate_kwh_per_distance must be > 0.")
         if charge_rate_kwh_per_hour <= 0:
             raise ValueError("charge_rate_kwh_per_hour must be > 0.")
+        if cost_weight < 0:
+            raise ValueError("cost_weight must be >= 0.")
+        if depot_charge_cost_per_kwh < 0:
+            raise ValueError("depot_charge_cost_per_kwh must be >= 0.")
         if reserve_soc_kwh < 0:
             raise ValueError("reserve_soc_kwh must be >= 0.")
         if num_evs <= 0:
@@ -47,7 +53,15 @@ class convoy(CVRPTWEnv):
         self.battery_capacity_kwh = float(battery_capacity_kwh)
         self.energy_rate_kwh_per_distance = float(energy_rate_kwh_per_distance)
         self.charge_rate_kwh_per_hour = float(charge_rate_kwh_per_hour)
+        self.cost_weight = float(cost_weight)
+        self.depot_charge_cost_per_kwh = float(depot_charge_cost_per_kwh)
         self.reserve_soc_kwh = float(reserve_soc_kwh)
+        # Reserve SOC is modeled by shrinking usable battery to (full - reserve).
+        self.effective_battery_kwh = self.battery_capacity_kwh - self.reserve_soc_kwh
+        if self.effective_battery_kwh <= 0:
+            raise ValueError(
+                "reserve_soc_kwh must be smaller than battery_capacity_kwh."
+            )
         self.num_evs = int(num_evs)
         self.charging_pool_sample_size = int(charging_pool_sample_size)
         # Script time values (TW, service, travel) are treated as minutes.
@@ -119,6 +133,7 @@ class convoy(CVRPTWEnv):
         )
         charge_rate_per_node[:, 0] = self.charge_rate_kwh_per_hour
         charge_cost_per_kwh_per_node = torch.zeros_like(charge_rate_per_node)
+        charge_cost_per_kwh_per_node[:, 0] = self.depot_charge_cost_per_kwh
 
         if (
             self.charging_pool_sample_size <= 0
@@ -202,6 +217,7 @@ class convoy(CVRPTWEnv):
         charge_cost_per_kwh_per_node = torch.zeros(
             (batch_size, total_nodes), dtype=torch.float32, device=device
         )
+        charge_cost_per_kwh_per_node[:, 0] = self.depot_charge_cost_per_kwh
         charge_cost_per_kwh_per_node[:, station_start:] = sampled_station_costs
         cp_id_per_node = torch.full(
             (batch_size, total_nodes), -1, dtype=torch.long, device=device
@@ -287,7 +303,7 @@ class convoy(CVRPTWEnv):
         ) * self.energy_rate_kwh_per_distance
         customer_mask = ~charge_nodes_mask
         required_energy = torch.where(customer_mask, energy_for_customer, energy_to_node)
-        battery_ok = td["current_battery"] >= (required_energy + self.reserve_soc_kwh)
+        battery_ok = td["current_battery"] >= required_energy
 
         mask = not_masked & can_reach_in_time & battery_ok
         # If nothing is feasible, force return to depot; do not relax TW filtering.
@@ -304,19 +320,46 @@ class convoy(CVRPTWEnv):
         has_customer_option = customer_feasible.any(dim=-1, keepdim=True)
         mask = torch.where(has_customer_option, customer_feasible, mask)
 
-        # If all customers are already served, force return to depot to terminate route.
+        # If all customers are served, prefer depot return when feasible.
+        # If depot is not feasible yet, allow feasible charge-node moves (CP/depot)
+        # so the EV can top up first and then return physically.
         unserved_customers = customer_nodes_mask & (~td["visited"].to(torch.bool))
         has_unserved = unserved_customers.any(dim=-1, keepdim=True)
-        mask = torch.where(has_unserved, mask, depot_only)
+        charge_feasible = mask & charge_nodes_mask
+        depot_feasible = charge_feasible[:, 0:1]
+        all_served_mask = torch.where(depot_feasible, depot_only, charge_feasible)
+        mask = torch.where(has_unserved, mask, all_served_mask)
 
-        # Final safety: ensure at least one feasible action exists.
+        # Final safety: if at depot and nothing feasible, keep depot selectable.
+        # Do not force impossible moves away from depot.
         needs_fallback = ~mask.any(dim=-1, keepdim=True)
-        return torch.where(needs_fallback, depot_only, mask)
+        at_depot_now = (td["current_node"].squeeze(-1) == 0).unsqueeze(-1)
+        fallback_to_depot = needs_fallback & at_depot_now
+        return torch.where(fallback_to_depot, depot_only, mask)
 
     def _step(self, td):
         """Advance transition, update EV SOC/charging state, then refresh mask."""
         batch_size = td["locs"].shape[0]
         device = td["locs"].device
+        # Enforce action feasibility against current mask.
+        # This keeps rollout physically valid even if a decoder emits an invalid
+        # action (e.g., rare beam backtracking artifacts).
+        current_mask = self.get_action_mask(td)
+        action_now = td["action"].reshape(batch_size).long()
+        action_feasible = current_mask.gather(1, action_now.unsqueeze(-1)).squeeze(-1).to(torch.bool)
+        if (~action_feasible).any():
+            fixed_action = action_now.clone()
+            for b in torch.nonzero(~action_feasible, as_tuple=False).squeeze(-1).tolist():
+                feasible_idx = torch.nonzero(current_mask[b], as_tuple=False).squeeze(-1)
+                if feasible_idx.numel() == 0:
+                    fixed_action[b] = 0
+                    continue
+                if "distances" in td.keys():
+                    nearest_pos = torch.argmin(td["distances"][b, feasible_idx]).item()
+                    fixed_action[b] = int(feasible_idx[nearest_pos].item())
+                else:
+                    fixed_action[b] = int(feasible_idx[0].item())
+            td["action"] = fixed_action
         travel_time = gather_by_index(td["travel_times"], td["action"]).reshape(
             [batch_size, 1]
         )
@@ -347,7 +390,7 @@ class convoy(CVRPTWEnv):
             selected_charge_rate = torch.full_like(
                 remaining_battery, self.charge_rate_kwh_per_hour
             )
-        charge_needed = torch.clamp(self.battery_capacity_kwh - remaining_battery, min=0.0)
+        charge_needed = torch.clamp(self.effective_battery_kwh - remaining_battery, min=0.0)
         charge_time = torch.zeros_like(remaining_battery)
         if at_charge_node.any():
             safe_charge_rate = torch.clamp(selected_charge_rate, min=1e-6)
@@ -373,7 +416,7 @@ class convoy(CVRPTWEnv):
         next_ready_time, next_vehicle_idx = vehicle_ready_time.min(dim=1)
         full_battery = torch.full(
             (batch_size, 1),
-            self.battery_capacity_kwh,
+            self.effective_battery_kwh,
             dtype=remaining_battery.dtype,
             device=device,
         )
@@ -390,6 +433,27 @@ class convoy(CVRPTWEnv):
         td = super(CVRPTWEnv, self)._step(td)
         action_mask = self.get_action_mask(td)
 
+        # Enforce explicit route closure: even after all customers are served,
+        # rollout should terminate only after the active EV reaches depot.
+        if "station_mask" in td.keys():
+            customer_nodes_mask_done = ~td["station_mask"]
+            customer_nodes_mask_done[:, 0] = False
+        else:
+            customer_nodes_mask_done = torch.ones_like(action_mask, dtype=torch.bool)
+            customer_nodes_mask_done[:, 0] = False
+        unserved_customers_done = customer_nodes_mask_done & (~td["visited"].to(torch.bool))
+        all_customers_served = ~unserved_customers_done.any(dim=-1)
+        at_depot_done = td["current_node"].squeeze(-1) == 0
+        must_return_to_depot = all_customers_served & (~at_depot_done)
+        if must_return_to_depot.any():
+            td["done"] = td["done"] & (~must_return_to_depot)
+            depot_only = torch.zeros_like(action_mask, dtype=torch.bool)
+            depot_only[:, 0] = True
+            depot_feasible_now = action_mask[:, 0]
+            force_depot_now = must_return_to_depot & depot_feasible_now
+            if force_depot_now.any():
+                action_mask = torch.where(force_depot_now[:, None], depot_only, action_mask)
+
         if "station_mask" in td.keys() and "charge_nodes_mask" in td.keys():
             station_mask = td["station_mask"]
             customer_nodes_mask = ~station_mask
@@ -402,7 +466,7 @@ class convoy(CVRPTWEnv):
                 station_mask.to(torch.float32), td["current_node"]
             ).squeeze(-1) > 0.5
             full_battery_now = td["current_battery"].squeeze(-1) >= (
-                self.battery_capacity_kwh - 1e-6
+                self.effective_battery_kwh - 1e-6
             )
             depot_only = torch.zeros_like(action_mask, dtype=torch.bool)
             depot_only[:, 0] = True
@@ -418,12 +482,22 @@ class convoy(CVRPTWEnv):
             if stranded_at_depot.any():
                 td["done"] = td["done"] | stranded_at_depot
                 action_mask = torch.where(stranded_at_depot[:, None], depot_only, action_mask)
+            # If no physically feasible move remains away from depot, terminate.
+            no_action_now = ~action_mask.any(dim=-1)
+            stranded_away = no_action_now & (~at_depot_now)
+            if stranded_away.any():
+                td["done"] = td["done"] | stranded_away
+                action_mask = torch.where(stranded_away[:, None], depot_only, action_mask)
 
         td.set("action_mask", action_mask)
         return td
 
     def _get_reward(self, td, actions):
-        """Reward = on-time customer rewards - charging cost paid at charging stations."""
+        """Reward = on-time customer rewards - charging cost at all charge nodes.
+
+        Also includes an implicit final depot return + top-up cost when rollout
+        ends away from depot (decoded actions may stop right after final customer).
+        """
         if "customer_reward_per_node" not in td.keys():
             raise ValueError("Combined mode requires customer_reward_per_node in TensorDict.")
 
@@ -466,12 +540,13 @@ class convoy(CVRPTWEnv):
             charge_cost_per_kwh_per_node = torch.zeros(
                 (batch_size, num_nodes), dtype=torch.float32, device=device
             )
+            charge_cost_per_kwh_per_node[:, 0] = self.depot_charge_cost_per_kwh
 
         current_node = torch.zeros(batch_size, dtype=torch.long, device=device)
         current_time = torch.zeros(batch_size, dtype=torch.float32, device=device)
         current_battery = torch.full(
             (batch_size,),
-            self.battery_capacity_kwh,
+            self.effective_battery_kwh,
             dtype=torch.float32,
             device=device,
         )
@@ -504,7 +579,9 @@ class convoy(CVRPTWEnv):
             is_station = station_mask[batch_idx, next_node]
             selected_rate = charge_rate_per_node[batch_idx, next_node]
 
-            charge_needed = torch.clamp(self.battery_capacity_kwh - remaining_battery, min=0.0)
+            charge_needed = torch.clamp(
+                self.effective_battery_kwh - remaining_battery, min=0.0
+            )
             safe_charge_rate = torch.clamp(selected_rate, min=1e-6)
             charge_time = torch.where(
                 is_charge_node,
@@ -527,11 +604,11 @@ class convoy(CVRPTWEnv):
 
             station_charge_cost = charge_cost_per_kwh_per_node[batch_idx, next_node]
             charging_penalty = torch.where(
-                is_station,
+                is_charge_node,
                 charge_needed * station_charge_cost,
                 zero_float,
             )
-            total_reward = total_reward - charging_penalty
+            total_reward = total_reward - (self.cost_weight * charging_penalty)
 
             visit_mask = torch.zeros_like(served_customers)
             visit_mask.scatter_(1, next_node.unsqueeze(-1), is_customer.unsqueeze(-1))
@@ -543,13 +620,32 @@ class convoy(CVRPTWEnv):
             vehicle_ready_time[batch_idx, current_vehicle_idx] = active_ready
 
             next_ready_time, next_vehicle_idx = vehicle_ready_time.min(dim=1)
-            full_battery = torch.full_like(remaining_battery, self.battery_capacity_kwh)
+            full_battery = torch.full_like(remaining_battery, self.effective_battery_kwh)
             battery_non_depot = torch.where(is_station, full_battery, remaining_battery)
 
             current_time = torch.where(at_depot, next_ready_time, finish_time)
             current_battery = torch.where(at_depot, full_battery, battery_non_depot)
             current_vehicle_idx = torch.where(at_depot, next_vehicle_idx, current_vehicle_idx)
             current_node = next_node
+
+        # Rollout can terminate with active EV away from depot after final customer.
+        # Account for mandatory final return-to-depot recharge cost explicitly.
+        need_final_return = current_node != 0
+        if need_final_return.any():
+            depot_node = torch.zeros_like(current_node)
+            travel_back_distance = dist_matrix[batch_idx, current_node, depot_node]
+            energy_back = travel_back_distance * self.energy_rate_kwh_per_distance
+            battery_at_depot = torch.clamp(current_battery - energy_back, min=0.0)
+            final_charge_needed = torch.clamp(
+                self.effective_battery_kwh - battery_at_depot, min=0.0
+            )
+            depot_charge_cost = charge_cost_per_kwh_per_node[:, 0]
+            final_depot_penalty = torch.where(
+                need_final_return,
+                final_charge_needed * depot_charge_cost,
+                zero_float,
+            )
+            total_reward = total_reward - (self.cost_weight * final_depot_penalty)
 
         return total_reward
 
@@ -570,7 +666,7 @@ class convoy(CVRPTWEnv):
                 ),
                 "current_battery": torch.full(
                     (*batch_size, 1),
-                    self.battery_capacity_kwh,
+                    self.effective_battery_kwh,
                     dtype=torch.float32,
                     device=device,
                 ),
