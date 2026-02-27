@@ -57,14 +57,13 @@ def _write_test_instance_csv(data_dir, node_info_by_global_id, deliveries, cp):
 
 
 def _resolve_data_dir():
-    # Priority: explicit override -> ~/CONVOY2/data -> legacy paths -> local sibling data dir
+    # Priority: explicit override -> ~/CONVOY/data -> legacy layout paths -> local sibling data dir
     data_dir_override = os.environ.get("CONVOY_DATA_DIR")
     candidates = []
     if data_dir_override:
         candidates.append(data_dir_override)
     candidates.extend(
         [
-            os.path.join(os.path.expanduser("~"), "CONVOY2", "data"),
             os.path.join(os.path.expanduser("~"), "CONVOY", "data"),
             os.path.join(os.path.expanduser("~"), "CONVOY", "optimal_and_heuristic", "data"),
             os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "data")),

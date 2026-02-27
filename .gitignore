@@ -2,3 +2,6 @@ config/gurobi_wls.json
 site/
 __pycache__/
 *.pyc
+results/*
+checkpoints_vrptw/*
+checkpoints_vrptw_small_methods/*

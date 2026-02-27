@@ -1,8 +1,8 @@
 # Tools
 
-Utility scripts under `CONVOY2/tools` for data conversion, test-instance generation, and baseline evaluation.
+Utility scripts under `CONVOY/tools` for data conversion, test-instance generation, and baseline evaluation.
 
-Run from repo root (`/home/akkcm/CONVOY2`) unless noted.
+Run from repo root (`~/CONVOY`) unless noted.
 
 ## File Summary
 
@@ -13,13 +13,14 @@ Run from repo root (`/home/akkcm/CONVOY2`) unless noted.
 | `tools/convert_to_evrp_instance.py` | `convert_test_csv_to_evrp_instance` | Convert CONVOY test CSV + matrix CSVs to EVRP baseline input text format. |
 | `tools/compute_baseline_metrics.py` | `compute_metrics` | Compute CONVOY reward/cost/objective from baseline solver output. |
 | `tools/run_baseline_pipeline.py` | `run_baseline_pipeline` | End-to-end: convert -> run baseline solver -> parse metrics. |
+| `tools/clear_cuda_memory.py` | `clear_cuda_memory` | Release Python references and trigger CUDA cache cleanup (`gc.collect`, `torch.cuda.empty_cache`, `torch.cuda.ipc_collect`). |
 
 ## Commands
 
 ### 1) Generate `test_instance.csv` from combined details
 
 ```bash
-/home/akkcm/myenv/bin/python tools/generate_test_instance.py \
+python tools/generate_test_instance.py \
   --combined-details-csv data/combined_data_jd200_1.csv \
   --customer-num 20 \
   --charging-stations-num 10 \
@@ -34,8 +35,8 @@ Notes:
 ### 2) Convert baseline TXT instance to CONVOY CSV datasets
 
 ```bash
-/home/akkcm/myenv/bin/python tools/convert_data.py \
-  --input-txt /home/akkcm/EVRP-TW-SPD-HMA/data/jd_instances/jd200_4.txt \
+python tools/convert_data.py \
+  --input-txt ~/EVRP-TW-SPD-HMA/data/jd_instances/jd200_4.txt \
   --output-dir data \
   --seed 123
 ```
@@ -43,7 +44,7 @@ Notes:
 ### 3) Convert `test_instance.csv` to EVRP baseline input file
 
 ```bash
-/home/akkcm/myenv/bin/python tools/convert_to_evrp_instance.py \
+python tools/convert_to_evrp_instance.py \
   --test-csv data/test_instance.csv \
   --dist-matrix-csv data/distance_matrix_jd200_1.csv \
   --time-matrix-csv data/time_matrix_jd200_1.csv \
@@ -54,7 +55,7 @@ Notes:
 ### 4) Compute metrics from baseline output
 
 ```bash
-/home/akkcm/myenv/bin/python tools/compute_baseline_metrics.py \
+python tools/compute_baseline_metrics.py \
   --baseline-output-file baseline/data/latest_baseline_output.txt \
   --test-instance-csv data/test_instance.csv \
   --id-map-csv baseline/data/test_instance_evrp.id_map.csv \
@@ -66,7 +67,7 @@ Notes:
 ### 5) Run full baseline pipeline in one command
 
 ```bash
-/home/akkcm/myenv/bin/python tools/run_baseline_pipeline.py \
+python tools/run_baseline_pipeline.py \
   --test-csv data/test_instance.csv \
   --dist-matrix-csv data/distance_matrix_jd200_1.csv \
   --time-matrix-csv data/time_matrix_jd200_1.csv \
@@ -78,12 +79,29 @@ Notes:
   --print-charging-events
 ```
 
+### 6) Clear CUDA memory cache from Python
+
+Run standalone:
+
+```bash
+python tools/clear_cuda_memory.py
+```
+
+Use in code:
+
+```python
+from tools.clear_cuda_memory import clear_cuda_memory
+
+clear_cuda_memory(model, trainer, env, batch, out)
+```
+
 ## Inspect CLI Help
 
 ```bash
-/home/akkcm/myenv/bin/python tools/generate_test_instance.py --help
-/home/akkcm/myenv/bin/python tools/convert_data.py --help
-/home/akkcm/myenv/bin/python tools/convert_to_evrp_instance.py --help
-/home/akkcm/myenv/bin/python tools/compute_baseline_metrics.py --help
-/home/akkcm/myenv/bin/python tools/run_baseline_pipeline.py --help
+python tools/generate_test_instance.py --help
+python tools/convert_data.py --help
+python tools/convert_to_evrp_instance.py --help
+python tools/compute_baseline_metrics.py --help
+python tools/run_baseline_pipeline.py --help
+python tools/clear_cuda_memory.py
 ```

@@ -166,8 +166,10 @@ def decode_and_print_solution(
     decode_kwargs: dict,
     trace_settings: dict | None = None,
     cp_postprocess_settings: dict | None = None,
+    verbose: bool = True,
 ) -> dict:
     """Decode one instance, print path details, and return summary dict."""
+    p = print if verbose else (lambda *_args, **_kwargs: None)
     with torch.inference_mode():
         td = env.reset(instance.to(model.device))
 
@@ -188,7 +190,7 @@ def decode_and_print_solution(
         requested_num_starts = int(decode_kwargs_local["num_starts"])
         if requested_num_starts > max_starts:
             decode_kwargs_local["num_starts"] = max_starts
-            print(
+            p(
                 "Decode note: capped num_starts from "
                 f"{requested_num_starts} to {max_starts} for this instance."
             )
@@ -200,13 +202,13 @@ def decode_and_print_solution(
             if capped_beam <= 1:
                 decode_kwargs_local.pop("beam_width", None)
                 decode_kwargs_local["decode_type"] = "greedy"
-                print(
+                p(
                     "Decode note: beam_search requested but only one feasible start "
                     "is available for this instance; falling back to greedy."
                 )
             else:
                 decode_kwargs_local["beam_width"] = capped_beam
-                print(
+                p(
                     "Decode note: capped beam_width from "
                     f"{requested_beam} to {capped_beam} for this instance."
                 )
@@ -224,19 +226,19 @@ def decode_and_print_solution(
     action_labels = [format_node_label(int(node), global_ids) for node in actions.tolist()]
     routes = split_routes(actions)
 
-    print(f"\n{title} ({decode_label} decode):")
-    print(f"Reward: {reward:.6f}")
-    print(f"Flat action sequence: {actions.tolist()}")
-    print(f"Flat action labels:   {action_labels}")
+    p(f"\n{title} ({decode_label} decode):")
+    p(f"Reward: {reward:.6f}")
+    p(f"Flat action sequence: {actions.tolist()}")
+    p(f"Flat action labels:   {action_labels}")
 
     if not routes:
-        print("Vehicle routes: []")
+        p("Vehicle routes: []")
     else:
-        print("Vehicle routes:")
+        p("Vehicle routes:")
         for i, route in enumerate(routes, start=1):
             labels = [format_node_label(int(n), global_ids) for n in route]
-            print(f"  Vehicle {i}: {route}")
-            print(f"             {labels}")
+            p(f"  Vehicle {i}: {route}")
+            p(f"             {labels}")
 
     if trace_settings is None:
         trace_settings = {}
@@ -255,14 +257,14 @@ def decode_and_print_solution(
     )
 
     if visit_trace:
-        print("Visit trace (customer + depot; includes distance + energy per step):")
+        p("Visit trace (customer + depot; includes distance + energy per step):")
         for rec in visit_trace:
             if rec["node_type"] == "depot":
                 node_txt = f"depot_id={int(rec['node_id']):>3d}"
             else:
                 node_txt = f"customer_id={int(rec['node_id']):>3d}"
             deficit_note = " [soc_deficit]" if rec["soc_deficit_kwh"] > 1e-9 else ""
-            print(
+            p(
                 f"  step={rec['step']:>3d} {node_txt} "
                 f"vehicle={rec['vehicle_id']:>2d} "
                 f"from_id={int(rec['from_node_id']):>3d} "
@@ -285,8 +287,8 @@ def decode_and_print_solution(
             visited_customer_ids.append(node)
 
     first_visit_customer_ids = list(dict.fromkeys(visited_customer_ids))
-    print(f"Visited customer IDs (actual, action order): {visited_customer_ids}")
-    print(f"Visited customer IDs (actual, first visit): {first_visit_customer_ids}")
+    p(f"Visited customer IDs (actual, action order): {visited_customer_ids}")
+    p(f"Visited customer IDs (actual, first visit): {first_visit_customer_ids}")
 
     cp_augmented = None
     if cp_postprocess_settings:
@@ -318,13 +320,13 @@ def decode_and_print_solution(
                 ),
             )
             if cp_augmented is not None:
-                print("Nearest CP per visited customer (KD-tree):")
+                p("Nearest CP per visited customer (KD-tree):")
                 for cid in sorted(cp_augmented["customer_to_nearest_cp"].keys()):
-                    print(
+                    p(
                         f"  customer_id={cid:>3d} -> cp_id={cp_augmented['customer_to_nearest_cp'][cid]:>3d}"
                     )
 
-                print("Augmented routes with inserted CPs (when needed):")
+                p("Augmented routes with inserted CPs (when needed):")
                 cp_ids = set(int(x) for x in cp_augmented.get("cp_ids", []))
                 depot_id = int(global_ids[0].item())
                 for i, route in enumerate(cp_augmented["augmented_routes"], start=1):
@@ -337,10 +339,10 @@ def decode_and_print_solution(
                             labels.append(f"CP{nid}")
                         else:
                             labels.append(f"CUST{nid}")
-                    print(f"  Vehicle {i}: {route}")
-                    print(f"             {labels}")
+                    p(f"  Vehicle {i}: {route}")
+                    p(f"             {labels}")
 
-                print("Augmented trace (with CP insertion and updated SoC):")
+                p("Augmented trace (with CP insertion and updated SoC):")
                 for rec in cp_augmented["trace"]:
                     node_prefix = (
                         "depot_id"
@@ -349,7 +351,7 @@ def decode_and_print_solution(
                     )
                     inserted_txt = " inserted_cp" if rec.get("inserted_cp", False) else ""
                     deficit_note = " [soc_deficit]" if rec["soc_deficit_kwh"] > 1e-9 else ""
-                    print(
+                    p(
                         f"  step={rec['step']:>3d} {node_prefix}={int(rec['node_id']):>3d} "
                         f"from_id={int(rec['from_node_id']):>3d} "
                         f"dist={rec['travel_distance']:.2f} "
@@ -362,9 +364,9 @@ def decode_and_print_solution(
                     )
                 skipped = cp_augmented.get("skipped_late_customers", [])
                 if skipped:
-                    print("Skipped late customers (no travel applied):")
+                    p("Skipped late customers (no travel applied):")
                     for rec in skipped:
-                        print(
+                        p(
                             f"  route={int(rec.get('route_id', 0)):>2d} "
                             f"customer_id={int(rec.get('customer_id', -1)):>3d} "
                             f"from_id={int(rec.get('from_id', -1)):>3d} "
@@ -375,7 +377,7 @@ def decode_and_print_solution(
                 comp_full = cp_augmented.get("reward_components_full") or cp_augmented.get(
                     "reward_components", {}
                 )
-                print(
+                p(
                     "Reward components (CP-augmented full charging): "
                     f"total_reward={float(comp_full.get('total_reward', 0.0)):.6f}, "
                     f"total_cost={float(comp_full.get('total_cost', 0.0)):.6f}, "
@@ -384,14 +386,14 @@ def decode_and_print_solution(
                 )
                 partial_events = cp_augmented.get("partial_charge_events", [])
                 if partial_events:
-                    print("Partial charging summary:")
+                    p("Partial charging summary:")
                     for evt in partial_events:
                         cp_txt = (
                             "DEPOT"
                             if int(evt.get("cp_node", -1)) == int(global_ids[0].item())
                             else f"CP{int(evt.get('cp_id', -1))}"
                         )
-                        print(
+                        p(
                             f"  route={int(evt.get('route_index', 0)):>2d} "
                             f"vehicle={int(evt.get('vehicle_id', 0)):>2d} "
                             f"node={cp_txt} "
@@ -400,7 +402,7 @@ def decode_and_print_solution(
                         )
                 comp_partial = cp_augmented.get("reward_components_partial", {})
                 if comp_partial:
-                    print(
+                    p(
                         "Reward components (CP-augmented partial charging): "
                         f"total_reward={float(comp_partial.get('total_reward', 0.0)):.6f}, "
                         f"total_cost={float(comp_partial.get('total_cost', 0.0)):.6f}, "

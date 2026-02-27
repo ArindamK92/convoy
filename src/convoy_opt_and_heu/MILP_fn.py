@@ -1,4 +1,4 @@
-"""Gurobi MILP model construction and solve utilities for CONVOY2."""
+"""Gurobi MILP model construction and solve utilities for CONVOY."""
 
 import gurobipy as gp
 from gurobipy import GRB
@@ -156,12 +156,16 @@ def MILP(
                     for y in D:
                         if x != y:
                             objective += chiDD[x, y, j, l] * reward[y] * alpha1
+        # reqCh[j,l] is the recharge performed between subtrip (l-1) and l.
+        # Therefore charging cost for reqCh[j,l] must be paid at the CP where
+        # subtrip l starts (chiCD), not at the CP where subtrip l ends (chiDC).
         for j in E:
             for l in S:
-                for x in D:
-                    for y in C:
-                        term0_component = chiDC[x, y, j, l] * theta[y]  # This is symbolic during model building
-                        objective -= term0_component * reqCh[j, l] * alpha2
+                if l == 0:
+                    continue
+                for x in C:
+                    starts_from_cp_x = gp.quicksum(chiCD[x, y, j, l] for y in D)
+                    objective -= theta[x] * starts_from_cp_x * reqCh[j, l] * alpha2
         for j in E:
             for l in S:
                 objective -= theta[0] * final_depot_charge[j, l] * alpha2
@@ -353,7 +357,9 @@ def MILP(
         #         model.addConstr(constraint9 <= 0, name=f"c9_{j}_{l}")
         
         
-        # Depot Constraint 1: An EV must start its first subtrip from the depot (CP 0)
+        # Depot Constraint 1:
+        # If EV j is used at all, its first subtrip (l=0) must start at depot.
+        # Unused EVs are allowed (both sides become 0).
         for j in E:
             depotConstraint1 = gp.LinExpr()
         
@@ -361,8 +367,11 @@ def MILP(
             for y in D:
                 depotConstraint1 += chiCD[0, y, j, 0]
         
-            # Add the constraint to the model: depotConstraint1 == 1
-            model.addConstr(depotConstraint1 == 1, name=f"depot_constraint1_{j}")
+            # Link with non-empty flag to avoid forcing every EV to be active.
+            model.addConstr(
+                depotConstraint1 == z_notIsEmptySubRoute[j, 0],
+                name=f"depot_constraint1_{j}",
+            )
             
             
             
@@ -525,12 +534,13 @@ def MILP(
                 
             for j in E:
                 for l in S:
-                    for x in D:
-                        for y in C:
-                            if chiDC[x, y, j, l].x > 0.5:
+                    if l > 0:
+                        for x in C:
+                            starts_from_cp_x = sum(chiCD[x, y, j, l].x for y in D)
+                            if starts_from_cp_x > 0.5:
                                 if DEBUG:
-                                    print("charged: ", j, l, x, y)
-                                total_cost += theta[y] * reqCh[j, l].x  # This is symbolic during model building
+                                    print("charged(start_cp): ", j, l, x)
+                                total_cost += theta[x] * reqCh[j, l].x
                     total_cost += theta[0] * final_depot_charge[j, l].x
                                 
                                 

@@ -3,113 +3,169 @@
 Top-level parser is defined in `convoy_parser.py` (`build_main_parser`).
 
 ## Purpose
-- Run Opt+Heu, RL, and optional baseline from one command
-- Share common inputs and sampling controls
-- Append all selected method metrics into one results CSV
+- Run Opt+Heu, `convoy_hybrid`, and `convoy_rl_partial_ch` from one command.
+- Share one dataset/sample configuration across stages.
+- Write one consolidated results CSV.
+
+## Execution Behavior
+- Default stage order per iteration:
+  1. Opt+Heu
+  2. Hybrid RL
+  3. CONVOY RL partial charging
+  4. Baseline (only if `--run-baseline` is set)
+- `--only-opt-heu` runs only Opt+Heu.
+- `--only-rl` skips Opt+Heu and runs RL stages.
+- `--skip-convoy-rl` skips only CONVOY RL partial charging while still running hybrid.
+- `--clear-rl-checkpoints` clears resolved checkpoint directories once before iterations start.
 
 ## Full Argument Reference
 
 ### Required Arguments
 
 | Argument | Type | Required | Default | Meaning |
-|---|---|---|---|---|
+| --- | --- | --- | --- | --- |
 | `--combined-details-csv` | `str` | Yes | - | Combined node details CSV (depot/customers/CPs). |
-| `--combined-dist-matrix-csv` | `str` | Yes | - | Distance matrix CSV (IDs on row/column). |
-| `--combined-time-matrix-csv` | `str` | Yes | - | Time matrix CSV (IDs on row/column). |
-| `--customer-num` | `int` | Yes | - | Number of customers sampled/used in each run. |
-| `--charging-stations-num` | `int` | Yes | - | Number of charging stations sampled/used in each run. |
+| `--combined-dist-matrix-csv` | `str` | Yes | - | Distance matrix CSV. |
+| `--combined-time-matrix-csv` | `str` | Yes | - | Time matrix CSV. |
+| `--customer-num` | `int` | Yes | - | Number of customers to sample/use. |
+| `--charging-stations-num` | `int` | Yes | - | Number of charging stations to sample/use. |
 | `--ev-num` | `int` | Yes | - | Number of EVs. |
 
 ### Core Optional Arguments
 
 | Argument | Type | Required | Default | Meaning |
-|---|---|---|---|---|
-| `--ev-energy-rate-kwh-per-distance` | `float` | No | `0.00025` | Energy usage per matrix distance unit. For meter-based matrices: `0.00025` = `4 km/kWh`. |
-| `--reserve-battery` | `float` | No | `0.0` | Reserve battery in kWh. Effective usable battery is `(full_battery - reserve_battery)`. |
-| `--iterations` | `int` | No | `1` | Number of repeated iterations to run. |
-| `--results-file` | `str` | No | `None` | Output results CSV. Relative paths are created under `CONVOY2/results/`. If omitted: `results3_<combined-details-stem>.csv`. |
-| `--clear-rl-checkpoints` | flag | No | `False` | Delete RL checkpoints before running (uses RL `--checkpoint-dir` if forwarded; otherwise `checkpoints_vrptw`). |
+| --- | --- | --- | --- | --- |
+| `--test-for-opt-heu` | optional `str` | No | `None` | Use existing test CSV for Opt+Heu instead of sampling from combined details. If passed without value: `data/test_instance.csv`. |
+| `--ev-energy-rate-kwh-per-distance` | `float` | No | `0.00025` | Shared energy usage per distance unit. |
+| `--reserve-battery` | `float` | No | `0.0` | Shared reserve battery in kWh. |
+| `--no-EDF-NDF` / `--no-edf-ndf` | flag | No | `False` | Skip EDF/NDF in Opt+Heu runner. |
+| `--cost-weight` | `float` | No | `1.0` | Shared into RL parser path (reward cost weight in RL stage). |
+| `--iterations` | `int` | No | `1` | Number of repeated iterations. |
+| `--results-file` | `str` | No | `None` | Output CSV path/name. If omitted: `results/results3_<combined-details-stem>.csv`. |
+| `--clear-rl-checkpoints` | flag | No | `False` | Delete resolved RL checkpoint directories before run. |
+
+### Runner Selection + Pass-Through Arguments
+
+| Argument | Type | Required | Default | Meaning |
+| --- | --- | --- | --- | --- |
+| `--only-rl` | flag | No | `False` | Skip Opt+Heu and run RL stages only. |
+| `--only-opt-heu` | flag | No | `False` | Skip RL stages and run Opt+Heu only. |
+| `--skip-convoy-rl` | flag | No | `False` | Skip only `convoy_rl_partial_ch`; keep hybrid stage. |
+| `--hybrid-checkpoint-dir` | `str` | No | `None` | Override `--checkpoint-dir` only for hybrid stage. |
+| `--rl-checkpoint-dir` | `str` | No | `None` | Override `--checkpoint-dir` only for CONVOY RL stage. |
+| `--opt-rl-extra` | append string | No | `[]` | Quoted pass-through flags for RL/hybrid parser. Can be repeated. |
+| `--opt-heu-extra` | append string | No | `[]` | Quoted pass-through flags for Opt+Heu parser. Can be repeated. |
 
 ### Baseline Pipeline Arguments
 
-These are used when `--run-baseline` is enabled.
+Used when `--run-baseline` is enabled.
 
 | Argument | Type | Required | Default | Meaning |
-|---|---|---|---|---|
-| `--run-baseline` | flag | No | `False` | Run EVRP baseline and append baseline metrics in results CSV. |
+| --- | --- | --- | --- | --- |
+| `--run-baseline` | flag | No | `False` | Run EVRP baseline and append baseline row(s). |
 | `--baseline-bin` | `str` | No | `baseline/bin/evrp-tw-spd` | Baseline solver binary path. |
-| `--baseline-time` | `int` | No | `10` | Baseline time limit in seconds per run. |
+| `--baseline-time` | `int` | No | `10` | Baseline solver time limit (seconds). |
 | `--baseline-runs` | `int` | No | `5` | Number of baseline solver runs. |
-| `--baseline-instance-output-path` | `str` | No | `baseline/data/test_instance_evrp.txt` | Generated EVRP instance path. |
-| `--baseline-output-file` | `str` | No | `baseline/data/latest_baseline_output.txt` | Stable copied baseline output file used for metric computation. |
-| `--baseline-quiet` | flag | No | `True` | Redirect baseline solver output to log file. |
+| `--baseline-instance-output-path` | `str` | No | `baseline/data/test_instance_evrp.txt` | Converted baseline instance path. |
+| `--baseline-output-file` | `str` | No | `baseline/data/latest_baseline_output.txt` | Stable copied baseline output file. |
+| `--baseline-quiet` | flag | No | `True` | Redirect baseline solver logs to file. |
 | `--baseline-no-quiet` | flag | No | `False` | Print baseline solver output to console. |
-| `--baseline-solver-log` | `str` | No | `baseline/data/baseline_solver.log` | Baseline solver log path when quiet mode is on. |
+| `--baseline-solver-log` | `str` | No | `baseline/data/baseline_solver.log` | Solver log path when quiet mode is on. |
 | `--baseline-print-charging-events` | flag | No | `False` | Print charging-event breakdown from computed baseline metrics. |
-| `--baseline-extra` | append string | No | `[]` | Quoted extra args forwarded to baseline solver; can be passed multiple times. |
+| `--baseline-print-route-trace` | flag | No | `False` | Print per-node baseline route trace. |
+| `--baseline-extra` | append string | No | `[]` | Quoted extra solver flags, repeatable. |
 
-### Runner Selection And Pass-Through Arguments
+## Run Examples
 
-| Argument | Type | Required | Default | Meaning |
-|---|---|---|---|---|
-| `--only-rl` | flag | No | `False` | Run RL only (skip Opt+Heu). |
-| `--only-opt-heu` | flag | No | `False` | Run Opt+Heu only (skip RL). |
-| `--opt-rl-extra` | append string | No | `[]` | Quoted extra args forwarded to RL runner parser; can be passed multiple times. |
-| `--opt-heu-extra` | append string | No | `[]` | Quoted extra args forwarded to Opt+Heu runner parser; can be passed multiple times. |
-
-## Usage Patterns
-
-### Base Combined Run (Opt+Heu + RL)
+### 1) Combined Run (Opt+Heu + Hybrid + CONVOY RL)
 
 ```bash
-python3 convoy_main.py \
+python convoy_main.py \
   --combined-details-csv data/combined_data_jd200_1.csv \
   --combined-dist-matrix-csv data/distance_matrix_jd200_1.csv \
   --combined-time-matrix-csv data/time_matrix_jd200_1.csv \
-  --customer-num 10 \
-  --charging-stations-num 3 \
-  --ev-num 2 \
-  --opt-rl-extra "--print-solution --save-model"
+  --customer-num 50 \
+  --charging-stations-num 10 \
+  --ev-num 10 \
+  --iterations 1 \
+  --results-file combined_run.csv \
+  --opt-heu-extra "--random-seed 111 --skip-optimal" \
+  --opt-rl-extra "--save-model --seed 111 --epochs 100 --fixed-eval-every 5" \
+  --hybrid-checkpoint-dir checkpoints_vrptw/hybrid_c50_cp10_ev10_e100 \
+  --rl-checkpoint-dir checkpoints_vrptw/rl_partial_c50_cp10_ev10_e100
 ```
 
-### Iterations + Baseline + Explicit Seeds
+### 2) RL Stages Only (Hybrid + CONVOY RL)
 
 ```bash
-python3 convoy_main.py \
+python convoy_main.py \
   --combined-details-csv data/combined_data_jd200_1.csv \
   --combined-dist-matrix-csv data/distance_matrix_jd200_1.csv \
   --combined-time-matrix-csv data/time_matrix_jd200_1.csv \
-  --customer-num 10 \
-  --charging-stations-num 3 \
-  --ev-num 2 \
-  --iterations 10 \
+  --customer-num 50 \
+  --charging-stations-num 10 \
+  --ev-num 10 \
+  --only-rl \
+  --opt-rl-extra "--test-csv data/test_instance_50c_10cp.csv --test-distance-matrix-csv data/distance_matrix_jd200_1.csv --test-time-matrix-csv data/time_matrix_jd200_1.csv --save-model --seed 111"
+```
+
+### 3) Hybrid Only
+
+```bash
+python convoy_main.py \
+  --combined-details-csv data/combined_data_jd200_1.csv \
+  --combined-dist-matrix-csv data/distance_matrix_jd200_1.csv \
+  --combined-time-matrix-csv data/time_matrix_jd200_1.csv \
+  --customer-num 50 \
+  --charging-stations-num 10 \
+  --ev-num 10 \
+  --only-rl \
+  --skip-convoy-rl \
+  --opt-rl-extra "--test-csv data/test_instance_50c_10cp.csv --test-distance-matrix-csv data/distance_matrix_jd200_1.csv --test-time-matrix-csv data/time_matrix_jd200_1.csv --save-model --seed 111 --epochs 100 --fixed-eval-every 5" \
+  --hybrid-checkpoint-dir checkpoints_vrptw/hybrid_c50_cp10_ev10_e100
+```
+
+### 4) Heuristics Only (Opt+Heu without MILP)
+
+```bash
+python convoy_main.py \
+  --combined-details-csv data/combined_data_jd200_1.csv \
+  --combined-dist-matrix-csv data/distance_matrix_jd200_1.csv \
+  --combined-time-matrix-csv data/time_matrix_jd200_1.csv \
+  --customer-num 50 \
+  --charging-stations-num 10 \
+  --ev-num 10 \
+  --only-opt-heu \
+  --iterations 1 \
+  --results-file heuristics_only.csv \
+  --opt-heu-extra "--random-seed 111 --skip-optimal"
+```
+
+### 5) Combined Run With Baseline Enabled
+
+```bash
+python convoy_main.py \
+  --combined-details-csv data/combined_data_jd200_1.csv \
+  --combined-dist-matrix-csv data/distance_matrix_jd200_1.csv \
+  --combined-time-matrix-csv data/time_matrix_jd200_1.csv \
+  --customer-num 50 \
+  --charging-stations-num 10 \
+  --ev-num 10 \
   --run-baseline \
   --baseline-time 10 \
   --baseline-runs 5 \
-  --results-file jd200_itr10.csv \
-  --opt-rl-extra "--print-solution --save-model --seed 42" \
-  --opt-heu-extra "--random-seed 123"
-```
-
-### RL-Only Mode
-
-```bash
-python3 convoy_main.py \
-  --combined-details-csv data/combined_data_jd200_1.csv \
-  --combined-dist-matrix-csv data/distance_matrix_jd200_1.csv \
-  --combined-time-matrix-csv data/time_matrix_jd200_1.csv \
-  --customer-num 10 \
-  --charging-stations-num 3 \
-  --ev-num 2 \
-  --only-rl \
-  --opt-rl-extra "--test-csv data/test_instance.csv --print-solution"
+  --baseline-quiet \
+  --baseline-extra "--g_1 20 --pop_size 4"
 ```
 
 ## Important Notes
 
-- If neither `--only-rl` nor `--only-opt-heu` is set, `convoy_main` runs Opt+Heu first, then RL, then baseline (if enabled).
-- When Opt+Heu runs, it regenerates `test_instance.csv`; RL and baseline use this generated file unless you explicitly override test CSV in forwarded args.
-- Keep pass-through argument blocks quoted:
-  - `--opt-rl-extra "--print-solution --save-model --seed 42"`
-  - `--opt-heu-extra "--skip-optimal --random-seed 123"`
-  - `--baseline-extra "--g_1 20 --pop_size 9"`
+- Keep pass-through blocks quoted:
+  - `--opt-rl-extra "--seed 111 --save-model"`
+  - `--opt-heu-extra "--skip-optimal --random-seed 111"`
+  - `--baseline-extra "--g_1 20 --pop_size 4"`
+- In `convoy_main`, `--print-solution` is removed for the hybrid stage timing path so hybrid elapsed time excludes printing overhead.
+- For full RL/hybrid/opt+heu inner argument lists, use:
+  - `convoy_hybrid/README.md`
+  - `src/convoy_rl_partial_ch/README.md`
+  - `tests/README.md`

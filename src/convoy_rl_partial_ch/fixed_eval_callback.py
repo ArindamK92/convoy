@@ -16,6 +16,7 @@ class FixedSetEvalCallback(Callback):
         every_n_epochs: int,
         eval_fn: Callable,
         decode_kwargs: dict | None = None,
+        verbose: bool = True,
     ):
         """Configure periodic fixed-set evaluation during model training."""
         super().__init__()
@@ -25,6 +26,7 @@ class FixedSetEvalCallback(Callback):
         self.every_n_epochs = max(1, every_n_epochs)
         self.eval_fn = eval_fn
         self.decode_kwargs = decode_kwargs or {"decode_type": "greedy"}
+        self.verbose = bool(verbose)
         self.history: list[tuple[int, float]] = []
 
     def on_validation_epoch_end(self, trainer, pl_module) -> None:
@@ -46,4 +48,5 @@ class FixedSetEvalCallback(Callback):
         )
         self.history.append((epoch, reward))
         pl_module.log("fixed_eval/reward", reward, on_epoch=True, prog_bar=True)
-        print(f"[fixed-eval] epoch={epoch} reward={reward:.6f}")
+        if self.verbose:
+            print(f"[fixed-eval] epoch={epoch} reward={reward:.6f}")

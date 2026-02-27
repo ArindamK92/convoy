@@ -1,4 +1,4 @@
-"""Central CLI parser utilities for CONVOY2 runners.
+"""Central CLI parser utilities for CONVOY runners.
 
 This module provides:
 - top-level `convoy_main` argument parsing,
@@ -187,6 +187,14 @@ def build_opt_heu_parser():
         help="Skip MILP and run only heuristic.",
     )
     parser.add_argument(
+        "--only-milp",
+        action="store_true",
+        help=(
+            "Run only MILP and skip heuristic/EDF/NDF. "
+            "Can also be forwarded from convoy_main via --opt-heu-extra \"--only-milp\"."
+        ),
+    )
+    parser.add_argument(
         "--random-seed",
         type=int,
         default=None,
@@ -348,7 +356,7 @@ def build_main_parser():
         default=None,
         help=(
             "Output results CSV filename/path. "
-            "If relative, it is created under CONVOY2/results/. "
+            "If relative, it is created under CONVOY/results/. "
             "If omitted, default is results3_<combined-details-stem>.csv."
         ),
     )
@@ -356,9 +364,10 @@ def build_main_parser():
         "--clear-rl-checkpoints",
         action="store_true",
         help=(
-            "If set, delete RL checkpoint directory before running. "
-            "Uses --checkpoint-dir from --opt-rl-extra when provided; "
-            "otherwise deletes CONVOY2/checkpoints_vrptw."
+            "If set, delete RL checkpoint directories before running. "
+            "By default uses --checkpoint-dir from --opt-rl-extra (or "
+            "CONVOY/checkpoints_vrptw). If both hybrid and convoy RL stages run, "
+            "both stage checkpoint dirs are cleared."
         ),
     )
     parser.add_argument(
@@ -460,6 +469,26 @@ def build_main_parser():
         help=(
             "Skip `convoy_rl_partial_ch` stage while still allowing "
             "`convoy_hybrid` (unless --only-opt-heu is set)."
+        ),
+    )
+    parser.add_argument(
+        "--hybrid-checkpoint-dir",
+        type=str,
+        default=None,
+        help=(
+            "Override --checkpoint-dir only for convoy_hybrid stage. "
+            "If set, takes precedence over --checkpoint-dir passed inside --opt-rl-extra "
+            "for the hybrid runner."
+        ),
+    )
+    parser.add_argument(
+        "--rl-checkpoint-dir",
+        type=str,
+        default=None,
+        help=(
+            "Override --checkpoint-dir only for convoy_rl_partial_ch stage. "
+            "If set, takes precedence over --checkpoint-dir passed inside --opt-rl-extra "
+            "for the convoy RL runner."
         ),
     )
     parser.add_argument(

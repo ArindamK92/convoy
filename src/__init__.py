@@ -1,1 +1,1 @@
-"""Top-level source package for CONVOY2."""
+"""Top-level source package for CONVOY."""

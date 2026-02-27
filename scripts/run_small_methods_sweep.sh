@@ -3,13 +3,11 @@ set -euo pipefail
 
 # Runs:
 # 1) customer-num = 5,10 with:
-#    - Optimal + Heuristic (no EDF/NDF),
-#    - convoy_hybrid,
-#    - convoy_rl_partial_ch.
+#    - Optimal (MILP) + Heuristic (no EDF/NDF),
+#    - convoy_hybrid.
 # 2) customer-num = 15 with:
 #    - Heuristic only (skip Optimal; no EDF/NDF),
-#    - convoy_hybrid,
-#    - convoy_rl_partial_ch.
+#    - convoy_hybrid.
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
@@ -29,19 +27,18 @@ EPOCHS="${EPOCHS:-100}"
 COST_WEIGHT="${COST_WEIGHT:-1.0}"
 
 RL_EXTRA_BASE="--seed ${SEED} --epochs ${EPOCHS}"
-RL_CHECKPOINT_ROOT="${RL_CHECKPOINT_ROOT:-checkpoints_vrptw_small_methods}"
+HYBRID_CHECKPOINT_DIR="${HYBRID_CHECKPOINT_DIR:-checkpoints_vrptw/hybrid_c50_cp10_ev10_e100}"
 
 run_case() {
   local cust_num="$1"
   local skip_optimal="$2"
   local results_file="small_methods_cust${cust_num}_cp${CP_NUM}_ev${EV_NUM}.csv"
-  local ckpt_dir="${RL_CHECKPOINT_ROOT}/cust${cust_num}_cp${CP_NUM}_ev${EV_NUM}"
 
   local opt_heu_extra="--random-seed ${SEED}"
   if [[ "${skip_optimal}" == "1" ]]; then
     opt_heu_extra="${opt_heu_extra} --skip-optimal"
   fi
-  local rl_extra="${RL_EXTRA_BASE} --checkpoint-dir ${ckpt_dir} --save-model"
+  local rl_extra="${RL_EXTRA_BASE} --save-model --checkpoint-dir ${HYBRID_CHECKPOINT_DIR}"
 
   local -a cmd=(
     "${PYTHON_BIN}" "convoy_main.py"
@@ -55,16 +52,16 @@ run_case() {
     "--iterations" "${ITERATIONS}"
     "--results-file" "${results_file}"
     "--no-edf-ndf"
-    "--clear-rl-checkpoints"
+    "--skip-convoy-rl"
     "--opt-rl-extra" "${rl_extra}"
     "--opt-heu-extra" "${opt_heu_extra}"
   )
 
   echo
   if [[ "${skip_optimal}" == "1" ]]; then
-    echo "[RUN] customer=${cust_num} cp=${CP_NUM} ev=${EV_NUM} methods=Heuristic+Hybrid+RL"
+    echo "[RUN] customer=${cust_num} cp=${CP_NUM} ev=${EV_NUM} methods=Heuristic+Hybrid"
   else
-    echo "[RUN] customer=${cust_num} cp=${CP_NUM} ev=${EV_NUM} methods=Optimal+Heuristic+Hybrid+RL"
+    echo "[RUN] customer=${cust_num} cp=${CP_NUM} ev=${EV_NUM} methods=Optimal+Heuristic+Hybrid"
   fi
   printf '[CMD]'; printf ' %q' "${cmd[@]}"; printf '\n'
   "${cmd[@]}"

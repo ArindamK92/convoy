@@ -1,6 +1,6 @@
-# CONVOY2 Documentation
+# CONVOY Documentation
 
-This site documents the combined RL + optimal/heuristic pipeline in `CONVOY2`.
+This site documents the combined RL + optimal/heuristic pipeline in `CONVOY`.
 
 ## What Is Covered
 - How to run the project quickly
@@ -12,8 +12,12 @@ This site documents the combined RL + optimal/heuristic pipeline in `CONVOY2`.
 ## Main Entry Points
 - Combined runner: `convoy_main.py`
 - RL-only test launcher: `tests/test_convoy_CPs1.py`
+- Hybrid test launcher: `tests/test_convoy_hybrid.py`
 - Opt+Heu-only test launcher: `tests/test_convoy_opt_and_heu.py`
 
 ## Start Here
 - `Quickstart` for setup and docs commands
+- `More Running Examples` for command cookbook style runs
+- `Tools` for utility scripts (data conversion, baseline pipeline, CUDA cleanup)
 - `CLI` for executable command templates
+- `CLI -> Argument Groups By Module` for where each argument family is documented

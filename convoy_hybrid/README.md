@@ -7,19 +7,19 @@
 
 ## Run Command
 
-Run from `/home/akkcm/CONVOY2`:
+Run from `~/CONVOY`:
 
 ```bash
-/home/akkcm/myenv/bin/python tests/test_convoy_hybrid.py \
+python tests/test_convoy_hybrid.py \
   --combined-details-csv data/combined_data_jd200_1.csv \
   --combined-dist-matrix-csv data/distance_matrix_jd200_1.csv \
   --combined-time-matrix-csv data/time_matrix_jd200_1.csv \
   --test-csv data/test_instance.csv \
   --test-distance-matrix-csv data/distance_matrix_jd200_1.csv \
   --test-time-matrix-csv data/time_matrix_jd200_1.csv \
-  --customer-num 20 \
-  --ev-num 8 \
-  --epochs 10 \
+  --customer-num 50 \
+  --ev-num 10 \
+  --epochs 100 \
   --fixed-eval-every 5 \
   --seed 111 \
   --print-solution
@@ -77,6 +77,7 @@ Run from `/home/akkcm/CONVOY2`:
 | `--decode-top-k` | Top-k truncation for sampling. |
 | `--decode-beam-width` | Beam width for `beam_search`. |
 | `--print-solution` | Print decoded route/trace details. |
+| `--verbose` | Enable detailed training/decode logs. Default is compact output (`false`). |
 
 ### Data Inputs
 
@@ -121,6 +122,12 @@ Run from `/home/akkcm/CONVOY2`:
 
 ## What Gets Printed For Test CSV
 
+Default (`--verbose false`):
+- `Reward components (CP-augmented full charging)`
+- `Reward components (CP-augmented partial charging)`
+- `CSV instance inference time`
+
+Detailed mode (`--verbose true`):
 - RL4CO decode reward (`CSV instance RL4CO reward`)
 - Decoded routes and node IDs
 - Augmented route trace with CP insertion

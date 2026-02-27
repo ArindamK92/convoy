@@ -1,7 +1,7 @@
-site_name: CONVOY2 Docs
-site_description: Documentation for CONVOY2 RL + Optimal/Heuristic workflows
+site_name: CONVOY Docs
+site_description: Documentation for CONVOY RL + Optimal/Heuristic workflows
 site_dir: site
-repo_name: CONVOY2
+repo_name: CONVOY
 
 theme:
   name: material
@@ -28,9 +28,13 @@ nav:
   - Home: index.md
   - Quickstart: quickstart.md
   - Examples: examples.md
+  - More Running Examples: more_running_examples.md
+  - Tools: tools.md
   - CLI:
+      - Argument Groups By Module: cli/argument_groups.md
       - Combined Runner (`convoy_main.py`): cli/convoy_main.md
       - RL Test Runner (`tests/test_convoy_CPs1.py`): cli/test_convoy_CPs1.md
+      - Hybrid Test Runner (`tests/test_convoy_hybrid.py`): cli/test_convoy_hybrid.md
       - Opt+Heu Test Runner (`tests/test_convoy_opt_and_heu.py`): cli/test_convoy_opt_and_heu.md
   - Data Formats: data_formats.md
   - Architecture: architecture.md

@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-"""Run EVRP baseline pipeline end-to-end for one CONVOY2 test instance.
+"""Run EVRP baseline pipeline end-to-end for one CONVOY test instance.
 
 Steps:
-1) Convert CONVOY2 test CSV to EVRP-TW-SPD-HMA instance format.
+1) Convert CONVOY test CSV to EVRP-TW-SPD-HMA instance format.
 2) Run baseline solver binary.
 3) Capture latest solver output into a stable file path.
 4) Compute CONVOY-style reward/cost/objective from solver output.

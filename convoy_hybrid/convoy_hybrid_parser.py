@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import argparse
+
 from src.convoy_rl_partial_ch.myparser import build_parser as build_base_parser
 
 
@@ -10,6 +12,20 @@ def _set_option_help(parser, option: str, text: str) -> None:
     action = parser._option_string_actions.get(option)  # pylint: disable=protected-access
     if action is not None:
         action.help = text
+
+
+def _parse_bool(value):
+    """Parse flexible CLI bool values (true/false, 1/0, yes/no)."""
+    if isinstance(value, bool):
+        return value
+    txt = str(value).strip().lower()
+    if txt in {"1", "true", "t", "yes", "y", "on"}:
+        return True
+    if txt in {"0", "false", "f", "no", "n", "off"}:
+        return False
+    raise argparse.ArgumentTypeError(
+        "Expected a boolean value (true/false, 1/0, yes/no)."
+    )
 
 
 def build_parser():
@@ -52,6 +68,17 @@ def build_parser():
         help=(
             "Seed used only to build fixed train/val instance when sampling "
             "from combined pool or when reading fixed-instance-csv."
+        ),
+    )
+    parser.add_argument(
+        "--verbose",
+        type=_parse_bool,
+        nargs="?",
+        const=True,
+        default=False,
+        help=(
+            "Print detailed training/decode logs. "
+            "Default false prints only compact summary output."
         ),
     )
     return parser

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Convert EVRP-TW-SPD-HMA TXT instances into CONVOY2 CSV datasets.
+"""Convert EVRP-TW-SPD-HMA TXT instances into CONVOY CSV datasets.
 
 Given an input file such as `jd200_1.txt`, this tool creates:
 - `combined_data_jd200_1.csv`
@@ -264,7 +264,7 @@ def build_parser() -> argparse.ArgumentParser:
     """Build CLI parser for converter script."""
     parser = argparse.ArgumentParser(
         description=(
-            "Convert EVRP-TW-SPD-HMA TXT instance into CONVOY2 combined-data, "
+            "Convert EVRP-TW-SPD-HMA TXT instance into CONVOY combined-data, "
             "distance-matrix, and time-matrix CSV files."
         )
     )
@@ -281,7 +281,7 @@ def build_parser() -> argparse.ArgumentParser:
         default="data",
         help=(
             "Directory to write output CSVs. "
-            "Defaults to CONVOY2/data when run from repo root."
+            "Defaults to CONVOY/data when run from repo root."
         ),
     )
     parser.add_argument(

@@ -80,18 +80,36 @@ cd ..
 ./bin/evrp-tw-spd --problem ./data/jd_instances/jd200_1.txt --pruning --time 1800 --runs 10 --g_1 20 --pop_size 4 --init rcrs --cross_repair regret --parent_selection circle --replacement one_on_one --O_1_eval --two_opt --two_opt_star --or_opt 2 --two_exchange 2 --elo 1 --related_removal --removal_lower 0.05 --removal_upper 0.05 --regret_insertion --individual_search --population_search --parallel_insertion --aggressive_local_search --station_range 0.1 --subproblem_range 2
 ```
 
-## CONVOY2 Pipeline Command
+## CONVOY Pipeline Command
 
-Run from `/home/akkcm/CONVOY2`:
+For CONVOY tool commands (including baseline pipeline/conversion/metrics), use:
+- `../tools/README.md`
 
-```bash
-/home/akkcm/myenv/bin/python tools/run_baseline_pipeline.py \
-  --test-csv data/test_instance_50c_10cp.csv \
-  --dist-matrix-csv data/distance_matrix_jd200_1.csv \
-  --time-matrix-csv data/time_matrix_jd200_1.csv \
-  --vehicles 5 \
-  --baseline-time 630 \
-  --baseline-runs 2 \
-  --baseline-no-quiet \
-  --baseline-extra "--g_1 20 --pop_size 4 --init rcrs --cross_repair regret --parent_selection circle --replacement one_on_one --O_1_eval --two_opt --two_opt_star --or_opt 2 --two_exchange 2 --elo 1 --removal_lower 0.1 --removal_upper 0.2 --individual_search --population_search --parallel_insertion --conservative_local_search --aggressive_local_search --station_range 0.5 --subproblem_range 1"
-```
+- When enabled  `--run-baseline` with `convoy_main.py`, it runs baseline conversion + solver + metric computation in each iteration.
+- Baseline row is appended to the same results CSV with:
+  - `Total reward` from visited-customer rewards,
+  - `Total cost` from charging cost (including final depot recharge-to-full),
+  - `Objective val = Total reward - Total cost`,
+  - `Total successful delivery` from visited customer count.
+- Baseline `Elapsed time (ms)` uses solver-reported time when available; otherwise wall-clock pipeline time.
+- Baseline defaults in `convoy_main.py`:
+  - `--baseline-runs` defaults to `5`.
+  - Baseline quiet mode is enabled by default (logs are written to `baseline/data/baseline_solver.log`).
+  - Use `--baseline-no-quiet` to print baseline solver logs to console.
+- Use `--baseline-extra "..."` to pass additional baseline solver flags.
+
+### Other arguments that can be used with convoy_main  
+- `--run-baseline`
+- `--baseline-bin`
+- `--baseline-time`
+- `--baseline-runs`
+- `--baseline-instance-output-path`
+- `--baseline-output-file`
+- `--baseline-quiet`
+- `--baseline-solver-log`
+- `--baseline-print-charging-events`
+- `--baseline-extra`
+
+
+Baseline repository:
+- https://github.com/0SliverBullet/EVRP-TW-SPD-HMA.git

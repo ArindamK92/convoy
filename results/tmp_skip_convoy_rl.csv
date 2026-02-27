@@ -1,3 +1,0 @@
-itr,Methods,Total delivery,Total CP,Total EV,delivery2ev_ratio,Elapsed time (ms),Total reward,Total cost,Objective val,Total successful delivery,Avg. cost per successful delivery
-1,Hybrid_RL4CO,5,3,2,2.5,872.7787910029292,63.0,15.82815,47.17185,4,3.9570375
-1,Hybrid_RL4CO_partial_charging,5,3,2,2.5,872.7787910029292,63.0,15.828149999999999,47.17185,4,3.9570374999999998

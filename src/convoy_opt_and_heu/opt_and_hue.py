@@ -1,4 +1,4 @@
-"""Main orchestration entry for Optimal and Heuristic CONVOY2 runs."""
+"""Main orchestration entry for Optimal and Heuristic CONVOY runs."""
 
 import copy
 import csv
@@ -125,6 +125,9 @@ def run_opt_heu(args):
     reserve_battery = float(args.reserve_battery)
     nS = math.ceil(nD / nE)
     delivery2ev_ratio = nD / nE
+    only_milp = bool(getattr(args, "only_milp", False))
+    if only_milp and bool(getattr(args, "skip_optimal", False)):
+        raise ValueError("Use at most one of --skip-optimal or --only-milp.")
 
     (
         cp,
@@ -167,7 +170,8 @@ def run_opt_heu(args):
     )
 
     rows = []
-    if not args.skip_optimal and nD < 20 and nC < 20:
+    run_milp = (not args.skip_optimal) and (only_milp or (nD < 20 and nC < 20))
+    if run_milp:
         (
             elapsed_time,
             total_cost,
@@ -218,6 +222,14 @@ def run_opt_heu(args):
                 ),
             }
         )
+    elif only_milp:
+        raise ValueError(
+            "MILP-only run requested but MILP is disabled by flags. "
+            "Remove --skip-optimal."
+        )
+
+    if only_milp:
+        return rows
 
     # Reserve SOC is modeled by shrinking usable battery to (full - reserve).
     effective_battery_kwh = beta_f - reserve_battery
@@ -334,6 +346,7 @@ def run_opt_heu_with_params(
     alpha1_override=1.0,
     alpha2_override=1.0,
     skip_optimal=False,
+    only_milp=False,
     random_seed=None,
     no_edf_ndf=False,
     test_for_opt_heu=None,
@@ -350,6 +363,7 @@ def run_opt_heu_with_params(
         alpha1=alpha1_override,
         alpha2=alpha2_override,
         skip_optimal=skip_optimal,
+        only_milp=only_milp,
         random_seed=random_seed,
         no_edf_ndf=no_edf_ndf,
         test_for_opt_heu=test_for_opt_heu,

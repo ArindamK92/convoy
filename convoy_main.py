@@ -1,4 +1,4 @@
-"""Top-level orchestrator for CONVOY2 experiments.
+"""Top-level orchestrator for CONVOY experiments.
 
 This runner combines:
 - `convoy_opt_and_heu` (Optimal + CSA heuristic),
@@ -66,6 +66,26 @@ def _remove_boolean_flag(args, flag_name):
         if token == flag_name or token.startswith(flag_name + "="):
             continue
         out.append(token)
+    return out
+
+
+def _set_flag_value(args, flag_name, flag_value):
+    """Set/replace `--flag value` style option in tokenized CLI args."""
+    out = []
+    skip_next = False
+    for idx, token in enumerate(args):
+        if skip_next:
+            skip_next = False
+            continue
+        if token == flag_name:
+            # Remove this flag and its following value token if present.
+            if idx + 1 < len(args):
+                skip_next = True
+            continue
+        if token.startswith(flag_name + "="):
+            continue
+        out.append(token)
+    out.extend([flag_name, str(flag_value)])
     return out
 
 
@@ -232,8 +252,16 @@ def main():
     all_results_rows = []
     opt_extra_raw = parse_extra_args(args.opt_heu_extra)
     rl_extra_args = parse_extra_args(args.opt_rl_extra)
+    if getattr(args, "rl_checkpoint_dir", None):
+        rl_extra_args = _set_flag_value(
+            rl_extra_args, "--checkpoint-dir", args.rl_checkpoint_dir
+        )
     # Hybrid stage uses same RL-style args but omits print-only overhead for timing.
     hybrid_extra_args = _remove_boolean_flag(rl_extra_args, "--print-solution")
+    if getattr(args, "hybrid_checkpoint_dir", None):
+        hybrid_extra_args = _set_flag_value(
+            hybrid_extra_args, "--checkpoint-dir", args.hybrid_checkpoint_dir
+        )
     baseline_extra_args = parse_extra_args(getattr(args, "baseline_extra", []))
     if run_hybrid and _contains_flag(rl_extra_args, "--print-solution"):
         print(
@@ -243,12 +271,24 @@ def main():
 
     # Optional cleanup so RL always retrains from scratch.
     if args.clear_rl_checkpoints:
-        rl_checkpoint_dir = _resolve_rl_checkpoint_dir(repo_root, rl_extra_args)
-        if os.path.isdir(rl_checkpoint_dir):
-            shutil.rmtree(rl_checkpoint_dir)
-            print("Deleted RL checkpoint directory:", rl_checkpoint_dir)
-        else:
-            print("RL checkpoint directory not found; skip delete:", rl_checkpoint_dir)
+        checkpoint_dirs = []
+        if run_rl:
+            checkpoint_dirs.append(_resolve_rl_checkpoint_dir(repo_root, rl_extra_args))
+        if run_hybrid:
+            checkpoint_dirs.append(
+                _resolve_rl_checkpoint_dir(repo_root, hybrid_extra_args)
+            )
+        if not checkpoint_dirs:
+            checkpoint_dirs.append(_resolve_rl_checkpoint_dir(repo_root, rl_extra_args))
+
+        for checkpoint_dir in sorted(set(checkpoint_dirs)):
+            if os.path.isdir(checkpoint_dir):
+                shutil.rmtree(checkpoint_dir)
+                print("Deleted RL checkpoint directory:", checkpoint_dir)
+            else:
+                print(
+                    "RL checkpoint directory not found; skip delete:", checkpoint_dir
+                )
 
     for itr in range(1, args.iterations + 1):
         print("=== Iteration {}/{} ===".format(itr, args.iterations))
@@ -300,13 +340,16 @@ def main():
             if os.path.isfile(generated_test_csv):
                 auto_test_csv = generated_test_csv
 
+            # Build a Namespace for hybrid runner from top-level args + --opt-rl-extra.
             hybrid_namespace, hybrid_cli_args = parse_hybrid_args(
                 args, hybrid_extra_args, auto_test_csv=auto_test_csv
             )
             if args.iterations > 1 and not _contains_flag(hybrid_extra_args, "--seed"):
                 hybrid_namespace.seed = int(hybrid_namespace.seed) + (itr - 1)
                 hybrid_cli_args = [*hybrid_cli_args, "--seed", str(hybrid_namespace.seed)]
+            # Print a reproducible CLI preview only (does not execute a shell command).
             _print_cmd("convoy_hybrid", hybrid_cli_args)
+            # Execute hybrid runner directly in-process and capture its returned metrics dict.
             hybrid_summary = run_hybrid(hybrid_namespace)
 
             hybrid_elapsed_ms = None
@@ -318,6 +361,7 @@ def main():
             hybrid_partial_total_cost = None
             hybrid_partial_objective_val = None
             hybrid_partial_total_successful_delivery = None
+            # Extract elapsed-time/objective metrics produced by hybrid runner for results CSV.
             if isinstance(hybrid_summary, dict):
                 hybrid_elapsed_ms = hybrid_summary.get("csv_inference_time_ms")
                 hybrid_full_total_reward = hybrid_summary.get(
@@ -468,14 +512,17 @@ def main():
             if os.path.isfile(generated_test_csv):
                 auto_test_csv = generated_test_csv
 
-            # Run hybrid first (same argument style as RL), then RL.
+            # Run hybrid first (same argument style as RL), then convoy_rl_partial_ch.
+            # Both are direct Python calls, not subprocess invocations.
             hybrid_namespace, hybrid_cli_args = parse_hybrid_args(
                 args, hybrid_extra_args, auto_test_csv=auto_test_csv
             )
             if args.iterations > 1 and not _contains_flag(hybrid_extra_args, "--seed"):
                 hybrid_namespace.seed = int(hybrid_namespace.seed) + (itr - 1)
                 hybrid_cli_args = [*hybrid_cli_args, "--seed", str(hybrid_namespace.seed)]
+            # Print a reproducible CLI preview only (does not execute a shell command).
             _print_cmd("convoy_hybrid", hybrid_cli_args)
+            # Execute hybrid runner directly in-process and capture its returned metrics dict.
             hybrid_summary = run_hybrid(hybrid_namespace)
 
             hybrid_elapsed_ms = None
@@ -487,6 +534,7 @@ def main():
             hybrid_partial_total_cost = None
             hybrid_partial_objective_val = None
             hybrid_partial_total_successful_delivery = None
+            # Extract elapsed-time/objective metrics produced by hybrid runner for results CSV.
             if isinstance(hybrid_summary, dict):
                 hybrid_elapsed_ms = hybrid_summary.get("csv_inference_time_ms")
                 hybrid_full_total_reward = hybrid_summary.get(
@@ -629,13 +677,16 @@ def main():
                 }
             )
 
+            # Build a Namespace for convoy_rl_partial_ch from top-level args + --opt-rl-extra.
             rl_namespace, rl_cli_args = parse_rl_args(
                 args, rl_extra_args, auto_test_csv=auto_test_csv
             )
             if args.iterations > 1 and not _contains_flag(rl_extra_args, "--seed"):
                 rl_namespace.seed = int(rl_namespace.seed) + (itr - 1)
                 rl_cli_args = [*rl_cli_args, "--seed", str(rl_namespace.seed)]
+            # Print a reproducible CLI preview only (does not execute a shell command).
             _print_cmd("convoy_rl_partial_ch", rl_cli_args)
+            # Execute convoy_rl_partial_ch directly in-process and capture returned metrics dict.
             rl_summary = run_rl(rl_namespace)
 
             # RL metrics with partial-charging post-processing
