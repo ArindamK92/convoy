@@ -1,7 +1,7 @@
-site_name: CONVOY Docs
-site_description: Documentation for CONVOY RL + Optimal/Heuristic workflows
+site_name: CONVOY2 Docs
+site_description: Documentation for CONVOY2 RL + Optimal/Heuristic workflows
 site_dir: site
-repo_name: CONVOY
+repo_name: CONVOY2
 
 theme:
   name: material

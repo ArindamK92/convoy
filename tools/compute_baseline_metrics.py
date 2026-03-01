@@ -575,7 +575,7 @@ def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description=(
             "Compute reward, charging cost, and objective score from EVRP-TW-SPD-HMA output "
-            "using CONVOY test_instance reward/cost columns."
+            "using CONVOY2 test_instance reward/cost columns."
         )
     )
     parser.add_argument("--baseline-output-file", required=True, help="Path to baseline output text file")

@@ -1,8 +1,9 @@
-"""Top-level orchestrator for CONVOY experiments.
+"""Top-level orchestrator for CONVOY2 experiments.
 
 This runner combines:
 - `convoy_opt_and_heu` (Optimal + CSA heuristic),
 - `convoy_rl_partial_ch` (RL training/testing + partial-charge evaluation),
+- `convoy_rl_partial_ch2` (RL-v2 training/testing + partial-charge evaluation),
 - optional EVRP baseline pipeline,
 
 and writes one consolidated results CSV across selected methods and iterations.
@@ -20,6 +21,7 @@ from convoy_parser import (
     parse_hybrid_args,
     parse_opt_heu_args,
     parse_rl_args,
+    parse_rl_v2_args,
 )
 
 
@@ -230,17 +232,32 @@ def main():
     1) optional Optimal/Heuristic (also generates `test_instance.csv`),
     2) optional Hybrid RL4CO stage,
     3) optional convoy RL stage,
-    4) optional Baseline pipeline (same instance + EV count).
+    4) optional convoy RL-v2 stage,
+    5) optional Baseline pipeline (same instance + EV count).
     """
     args = parse_args()
-    if args.only_rl and args.only_opt_heu:
-        raise ValueError("Use at most one of --only-rl or --only-opt-heu.")
+    only_modes = [
+        bool(getattr(args, "only_rl", False)),
+        bool(getattr(args, "only_opt_heu", False)),
+        bool(getattr(args, "only_rl_v2", False)),
+    ]
+    if sum(only_modes) > 1:
+        raise ValueError(
+            "Use at most one of --only-rl, --only-opt-heu, or --only-rl-v2."
+        )
     if args.iterations <= 0:
         raise ValueError("--iterations must be > 0.")
 
-    run_hybrid = not args.only_opt_heu
-    run_rl = run_hybrid and (not args.skip_convoy_rl)
-    run_opt_heu = not args.only_rl
+    if getattr(args, "only_rl_v2", False):
+        run_opt_heu = False
+        run_hybrid = False
+        run_rl = False
+        run_rl_v2 = True
+    else:
+        run_hybrid = not args.only_opt_heu
+        run_rl = run_hybrid and (not args.skip_convoy_rl)
+        run_opt_heu = not args.only_rl
+        run_rl_v2 = False
     run_baseline = bool(getattr(args, "run_baseline", False))
 
     repo_root = os.path.dirname(os.path.abspath(__file__))
@@ -252,9 +269,14 @@ def main():
     all_results_rows = []
     opt_extra_raw = parse_extra_args(args.opt_heu_extra)
     rl_extra_args = parse_extra_args(args.opt_rl_extra)
+    rl_v2_extra_args = parse_extra_args(args.opt_rl_extra)
     if getattr(args, "rl_checkpoint_dir", None):
         rl_extra_args = _set_flag_value(
             rl_extra_args, "--checkpoint-dir", args.rl_checkpoint_dir
+        )
+    if getattr(args, "rl_v2_checkpoint_dir", None):
+        rl_v2_extra_args = _set_flag_value(
+            rl_v2_extra_args, "--checkpoint-dir", args.rl_v2_checkpoint_dir
         )
     # Hybrid stage uses same RL-style args but omits print-only overhead for timing.
     hybrid_extra_args = _remove_boolean_flag(rl_extra_args, "--print-solution")
@@ -274,6 +296,8 @@ def main():
         checkpoint_dirs = []
         if run_rl:
             checkpoint_dirs.append(_resolve_rl_checkpoint_dir(repo_root, rl_extra_args))
+        if run_rl_v2:
+            checkpoint_dirs.append(_resolve_rl_checkpoint_dir(repo_root, rl_v2_extra_args))
         if run_hybrid:
             checkpoint_dirs.append(
                 _resolve_rl_checkpoint_dir(repo_root, hybrid_extra_args)
@@ -322,7 +346,7 @@ def main():
             for row in opt_rows:
                 row["itr"] = itr
             iter_rows.extend(opt_rows)
-        elif run_hybrid or run_baseline:
+        elif run_hybrid or run_rl or run_rl_v2 or run_baseline:
             # Ensure RL-only / Baseline-only runs still regenerate test_instance.csv
             # according to shared sampling arguments.
             _generate_test_instance_csv(args, opt_extra_raw, itr)
@@ -789,6 +813,138 @@ def main():
                         else ""
                     ),
                     "avg_cost_per_successful_delivery": rl_avg_cost,
+                }
+            )
+
+        if run_rl_v2:
+            from src.convoy_rl_partial_ch2.convoy_rl_main import run_rl as run_rl_v2_fn
+
+            auto_test_csv = None
+            if os.path.isfile(generated_test_csv):
+                auto_test_csv = generated_test_csv
+
+            # Build a Namespace for convoy_rl_partial_ch2 from top-level args + --opt-rl-extra.
+            rl_v2_namespace, rl_v2_cli_args = parse_rl_v2_args(
+                args, rl_v2_extra_args, auto_test_csv=auto_test_csv
+            )
+            if args.iterations > 1 and not _contains_flag(rl_v2_extra_args, "--seed"):
+                rl_v2_namespace.seed = int(rl_v2_namespace.seed) + (itr - 1)
+                rl_v2_cli_args = [*rl_v2_cli_args, "--seed", str(rl_v2_namespace.seed)]
+            _print_cmd("convoy_rl_partial_ch2", rl_v2_cli_args)
+            rl_v2_summary = run_rl_v2_fn(rl_v2_namespace)
+
+            # RL-v2 metrics with partial-charging post-processing
+            rl_v2_total_reward = None
+            rl_v2_total_cost = None
+            rl_v2_objective_val = None
+            rl_v2_total_successful_delivery = None
+            rl_v2_inference_time_ms = None
+            # RL-v2 metrics before partial charging (full-charge trace decomposition)
+            rl_v2_full_total_reward = None
+            rl_v2_full_total_cost = None
+            rl_v2_full_objective_val = None
+            rl_v2_full_total_successful_delivery = None
+            if isinstance(rl_v2_summary, dict):
+                rl_v2_total_reward = rl_v2_summary.get("csv_total_reward")
+                rl_v2_total_cost = rl_v2_summary.get("csv_total_cost")
+                rl_v2_objective_val = rl_v2_summary.get("csv_objective_val")
+                rl_v2_total_successful_delivery = rl_v2_summary.get(
+                    "csv_total_successful_delivery"
+                )
+                if rl_v2_objective_val is None:
+                    rl_v2_objective_val = rl_v2_summary.get("csv_instance_reward")
+                if rl_v2_objective_val is None:
+                    rl_v2_objective_val = rl_v2_summary.get("test_reward")
+                rl_v2_inference_time_ms = rl_v2_summary.get("csv_inference_time_ms")
+                rl_v2_full_total_reward = rl_v2_summary.get("csv_full_charge_total_reward")
+                rl_v2_full_total_cost = rl_v2_summary.get("csv_full_charge_total_cost")
+                rl_v2_full_objective_val = rl_v2_summary.get(
+                    "csv_full_charge_objective_val"
+                )
+                rl_v2_full_total_successful_delivery = rl_v2_summary.get(
+                    "csv_full_charge_total_successful_delivery"
+                )
+
+            rl_v2_avg_cost = ""
+            if rl_v2_total_cost is not None and rl_v2_total_successful_delivery is not None:
+                rl_v2_avg_cost = _safe_avg(
+                    rl_v2_total_cost, rl_v2_total_successful_delivery
+                )
+
+            # Row 1: RL-v2 reward components before partial charging.
+            if (
+                rl_v2_full_total_reward is not None
+                or rl_v2_full_total_cost is not None
+                or rl_v2_full_objective_val is not None
+            ):
+                rl_v2_full_avg_cost = ""
+                if (
+                    rl_v2_full_total_cost is not None
+                    and rl_v2_full_total_successful_delivery is not None
+                ):
+                    rl_v2_full_avg_cost = _safe_avg(
+                        rl_v2_full_total_cost, rl_v2_full_total_successful_delivery
+                    )
+                iter_rows.append(
+                    {
+                        "itr": itr,
+                        "method": "RL_v2",
+                        "total_delivery": args.customer_num,
+                        "total_cp": args.charging_stations_num,
+                        "total_ev": args.ev_num,
+                        "delivery2ev_ratio": args.customer_num / args.ev_num,
+                        "elapsed_time_ms": (
+                            rl_v2_inference_time_ms
+                            if rl_v2_inference_time_ms is not None
+                            else ""
+                        ),
+                        "total_reward": (
+                            rl_v2_full_total_reward
+                            if rl_v2_full_total_reward is not None
+                            else ""
+                        ),
+                        "total_cost": (
+                            rl_v2_full_total_cost if rl_v2_full_total_cost is not None else ""
+                        ),
+                        "objective_val": (
+                            rl_v2_full_objective_val
+                            if rl_v2_full_objective_val is not None
+                            else ""
+                        ),
+                        "total_successful_delivery": (
+                            rl_v2_full_total_successful_delivery
+                            if rl_v2_full_total_successful_delivery is not None
+                            else ""
+                        ),
+                        "avg_cost_per_successful_delivery": rl_v2_full_avg_cost,
+                    }
+                )
+
+            # Row 2: RL-v2 reward components after partial charging.
+            iter_rows.append(
+                {
+                    "itr": itr,
+                    "method": "RL_v2_partial_charging",
+                    "total_delivery": args.customer_num,
+                    "total_cp": args.charging_stations_num,
+                    "total_ev": args.ev_num,
+                    "delivery2ev_ratio": args.customer_num / args.ev_num,
+                    "elapsed_time_ms": (
+                        rl_v2_inference_time_ms if rl_v2_inference_time_ms is not None else ""
+                    ),
+                    "total_reward": (
+                        rl_v2_total_reward if rl_v2_total_reward is not None else ""
+                    ),
+                    "total_cost": rl_v2_total_cost if rl_v2_total_cost is not None else "",
+                    "objective_val": (
+                        rl_v2_objective_val if rl_v2_objective_val is not None else ""
+                    ),
+                    "total_successful_delivery": (
+                        rl_v2_total_successful_delivery
+                        if rl_v2_total_successful_delivery is not None
+                        else ""
+                    ),
+                    "avg_cost_per_successful_delivery": rl_v2_avg_cost,
                 }
             )
 

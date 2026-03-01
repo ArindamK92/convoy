@@ -1,6 +1,6 @@
-# CONVOY Documentation
+# CONVOY2 Documentation
 
-This site documents the combined RL + optimal/heuristic pipeline in `CONVOY`.
+This site documents the combined RL + optimal/heuristic pipeline in `CONVOY2`.
 
 ## What Is Covered
 - How to run the project quickly

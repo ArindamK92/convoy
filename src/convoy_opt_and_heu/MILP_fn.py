@@ -1,4 +1,4 @@
-"""Gurobi MILP model construction and solve utilities for CONVOY."""
+"""Gurobi MILP model construction and solve utilities for CONVOY2."""
 
 import gurobipy as gp
 from gurobipy import GRB

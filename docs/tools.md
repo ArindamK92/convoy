@@ -1,6 +1,6 @@
 # Tools
 
-This page summarizes utility scripts in `CONVOY/tools`.
+This page summarizes utility scripts in `CONVOY2/tools`.
 
 For full commands and flags, use:
 - `tools/README.md`

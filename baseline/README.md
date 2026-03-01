@@ -80,9 +80,9 @@ cd ..
 ./bin/evrp-tw-spd --problem ./data/jd_instances/jd200_1.txt --pruning --time 1800 --runs 10 --g_1 20 --pop_size 4 --init rcrs --cross_repair regret --parent_selection circle --replacement one_on_one --O_1_eval --two_opt --two_opt_star --or_opt 2 --two_exchange 2 --elo 1 --related_removal --removal_lower 0.05 --removal_upper 0.05 --regret_insertion --individual_search --population_search --parallel_insertion --aggressive_local_search --station_range 0.1 --subproblem_range 2
 ```
 
-## CONVOY Pipeline Command
+## CONVOY2 Pipeline Command
 
-For CONVOY tool commands (including baseline pipeline/conversion/metrics), use:
+For CONVOY2 tool commands (including baseline pipeline/conversion/metrics), use:
 - `../tools/README.md`
 
 - When enabled  `--run-baseline` with `convoy_main.py`, it runs baseline conversion + solver + metric computation in each iteration.

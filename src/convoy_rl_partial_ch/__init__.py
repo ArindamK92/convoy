@@ -1,1 +1,1 @@
-"""Reinforcement-learning components for the CONVOY workflow."""
+"""Reinforcement-learning components for the CONVOY2 workflow."""

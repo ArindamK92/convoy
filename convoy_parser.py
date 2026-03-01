@@ -1,4 +1,4 @@
-"""Central CLI parser utilities for CONVOY runners.
+"""Central CLI parser utilities for CONVOY2 runners.
 
 This module provides:
 - top-level `convoy_main` argument parsing,
@@ -35,6 +35,13 @@ def _build_rl_parser():
     from src.convoy_rl_partial_ch.myparser import build_parser as build_rl_parser
 
     return build_rl_parser()
+
+
+def _build_rl_v2_parser():
+    """Load and return the RL-v2 parser from `src.convoy_rl_partial_ch2.myparser`."""
+    from src.convoy_rl_partial_ch2.myparser import build_parser as build_rl_v2_parser
+
+    return build_rl_v2_parser()
 
 
 def _build_hybrid_parser():
@@ -81,6 +88,18 @@ def parse_rl_args(main_args, rl_extra_args, auto_test_csv=None):
     """Parse RL args synthesized from top-level args and pass-through extras."""
     rl_cli_args = build_rl_cli_args(main_args, rl_extra_args, auto_test_csv=auto_test_csv)
     rl_parser = _build_rl_parser()
+    return rl_parser.parse_args(rl_cli_args), rl_cli_args
+
+
+def parse_rl_v2_direct_args(cli_args=None):
+    """Parse RL-v2 arguments directly (standalone RL-v2 invocation)."""
+    return _build_rl_v2_parser().parse_args(cli_args)
+
+
+def parse_rl_v2_args(main_args, rl_extra_args, auto_test_csv=None):
+    """Parse RL-v2 args synthesized from top-level args and pass-through extras."""
+    rl_cli_args = build_rl_cli_args(main_args, rl_extra_args, auto_test_csv=auto_test_csv)
+    rl_parser = _build_rl_v2_parser()
     return rl_parser.parse_args(rl_cli_args), rl_cli_args
 
 
@@ -356,7 +375,7 @@ def build_main_parser():
         default=None,
         help=(
             "Output results CSV filename/path. "
-            "If relative, it is created under CONVOY/results/. "
+            "If relative, it is created under CONVOY2/results/. "
             "If omitted, default is results3_<combined-details-stem>.csv."
         ),
     )
@@ -366,7 +385,7 @@ def build_main_parser():
         help=(
             "If set, delete RL checkpoint directories before running. "
             "By default uses --checkpoint-dir from --opt-rl-extra (or "
-            "CONVOY/checkpoints_vrptw). If both hybrid and convoy RL stages run, "
+            "CONVOY2/checkpoints_vrptw). If both hybrid and convoy RL stages run, "
             "both stage checkpoint dirs are cleared."
         ),
     )
@@ -464,6 +483,14 @@ def build_main_parser():
         help="Run only optimal+heuristic launcher (skip RL).",
     )
     parser.add_argument(
+        "--only-rl-v2",
+        action="store_true",
+        help=(
+            "Run only `convoy_rl_partial_ch2` launcher "
+            "(skip optimal+heuristic, convoy_hybrid, and convoy_rl_partial_ch)."
+        ),
+    )
+    parser.add_argument(
         "--skip-convoy-rl",
         action="store_true",
         help=(
@@ -489,6 +516,16 @@ def build_main_parser():
             "Override --checkpoint-dir only for convoy_rl_partial_ch stage. "
             "If set, takes precedence over --checkpoint-dir passed inside --opt-rl-extra "
             "for the convoy RL runner."
+        ),
+    )
+    parser.add_argument(
+        "--rl-v2-checkpoint-dir",
+        type=str,
+        default=None,
+        help=(
+            "Override --checkpoint-dir only for convoy_rl_partial_ch2 stage. "
+            "If set, takes precedence over --checkpoint-dir passed inside --opt-rl-extra "
+            "for the convoy RL-v2 runner."
         ),
     )
     parser.add_argument(

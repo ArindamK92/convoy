@@ -8,7 +8,7 @@
 ```bash
 python3 -m venv ~/myenv
 source ~/myenv/bin/activate
-cd ~/CONVOY
+cd ~/CONVOY2
 pip install -r requirements.txt
 ```
 
@@ -67,8 +67,10 @@ Wrapper-only arguments in `convoy_main.py`:
 | --- | --- | --- |
 | `--only-rl` | `False` | Skip opt+heu stage and run RL stages only. |
 | `--only-opt-heu` | `False` | Skip RL stages and run opt+heu only. |
+| `--only-rl-v2` | `False` | Run only `convoy_rl_partial_ch2` stage. |
 | `--skip-convoy-rl` | `False` | Skip only `convoy_rl_partial_ch`; still allows `convoy_hybrid` when RL is enabled. |
 | `--rl-checkpoint-dir` | `None` | Stage-specific checkpoint directory override for `convoy_rl_partial_ch`. |
+| `--rl-v2-checkpoint-dir` | `None` | Stage-specific checkpoint directory override for `convoy_rl_partial_ch2`. |
 | `--hybrid-checkpoint-dir` | `None` | Stage-specific checkpoint directory override for `convoy_hybrid`. |
 | `--opt-rl-extra` | `[]` | Repeatable quoted pass-through args for RL/hybrid parsers (`action=append`). |
 | `--opt-heu-extra` | `[]` | Repeatable quoted pass-through args for opt+heu parser (`action=append`). |
@@ -82,6 +84,7 @@ Wrapper-only arguments in `convoy_main.py`:
 - `convoy_main.py` does not interpret these inner flags itself; it forwards them to the corresponding runner parser.
 - Use quoted strings so multiple forwarded flags stay grouped.
 - `--rl-checkpoint-dir` overrides `--checkpoint-dir` only for `convoy_rl_partial_ch`.
+- `--rl-v2-checkpoint-dir` overrides `--checkpoint-dir` only for `convoy_rl_partial_ch2`.
 - `--hybrid-checkpoint-dir` overrides `--checkpoint-dir` only for `convoy_hybrid`.
 
 Examples:
@@ -96,9 +99,9 @@ Examples:
 - When enabled, it deletes checkpoint folders once at the start of `convoy_main.py`.
 - If both hybrid and convoy RL stages run, both stage checkpoint directories are cleared.
 - Directory resolution order per stage:
-  - stage-specific override (`--hybrid-checkpoint-dir` or `--rl-checkpoint-dir`),
+  - stage-specific override (`--hybrid-checkpoint-dir`, `--rl-checkpoint-dir`, or `--rl-v2-checkpoint-dir`),
   - then `--checkpoint-dir` from `--opt-rl-extra`,
-  - otherwise default `checkpoints_vrptw` under `CONVOY`.
+  - otherwise default `checkpoints_vrptw` under `CONVOY2`.
 
 
 
@@ -146,7 +149,35 @@ python convoy_main.py \
   --opt-rl-extra "--test-csv data/test_instance_50c_10cp.csv --test-distance-matrix-csv data/distance_matrix_jd200_1.csv --test-time-matrix-csv data/time_matrix_jd200_1.csv --print-solution --save-model --seed 111"
 ```
 
-### 3) CONVOY_hybrid Only
+### 3) CONVOY RLv2 Only (AM)
+```bash
+python convoy_main.py \
+  --combined-details-csv data/combined_data_jd200_1.csv \
+  --combined-dist-matrix-csv data/distance_matrix_jd200_1.csv \
+  --combined-time-matrix-csv data/time_matrix_jd200_1.csv \
+  --customer-num 50 \
+  --charging-stations-num 10 \
+  --ev-num 10 \
+  --only-rl-v2 \
+  --rl-v2-checkpoint-dir checkpoints_vrptw/rl_partial_ch2_c50_cp10_ev10_e100 \
+  --opt-rl-extra "--test-csv data/test_instance_50c_10cp.csv --test-distance-matrix-csv data/distance_matrix_jd200_1.csv --test-time-matrix-csv data/time_matrix_jd200_1.csv --print-solution --save-model --seed 111 --epochs 100 --fixed-eval-every 5"
+```
+
+### 4) CONVOY RLv2 Only (POMO)
+```bash
+python convoy_main.py \
+  --combined-details-csv data/combined_data_jd200_1.csv \
+  --combined-dist-matrix-csv data/distance_matrix_jd200_1.csv \
+  --combined-time-matrix-csv data/time_matrix_jd200_1.csv \
+  --customer-num 50 \
+  --charging-stations-num 10 \
+  --ev-num 10 \
+  --only-rl-v2 \
+  --rl-v2-checkpoint-dir checkpoints_vrptw/rl_partial_ch2_c50_cp10_ev10_e100_pomo \
+  --opt-rl-extra "--test-csv data/test_instance_50c_10cp.csv --test-distance-matrix-csv data/distance_matrix_jd200_1.csv --test-time-matrix-csv data/time_matrix_jd200_1.csv --print-solution --save-model --seed 111 --epochs 100 --fixed-eval-every 5 --rl-algo pomo --baseline shared --pomo-num-starts 10 --pomo-num-augment 8"
+```
+
+### 5) CONVOY_hybrid Only
 ```bash
 python convoy_main.py \
   --combined-details-csv data/combined_data_jd200_1.csv \
@@ -161,7 +192,7 @@ python convoy_main.py \
   --hybrid-checkpoint-dir checkpoints_vrptw/hybrid_c50_cp10_ev10_e100
 ```
 
-### 4) Heuristics Only
+### 6) Heuristics Only
 ```bash
 python convoy_main.py \
   --combined-details-csv data/combined_data_jd200_1.csv \
@@ -195,3 +226,9 @@ For additional variants (sampling/beam/POMO sweeps, experiment script automation
 For tool-based commands (pipeline, conversion, metrics, and data utilities), use:
 - `tools/README.md`
 
+
+
+## Important Self Note:
+Convoy hybrid is now m-VRPTW.  
+Convoy_rl_partial_ch2 is now hybrid.
+TODO: Change it accordingly   

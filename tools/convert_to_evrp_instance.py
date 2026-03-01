@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Convert CONVOY test CSV + distance/time matrices to EVRP-TW-SPD-HMA instance format."""
+"""Convert CONVOY2 test CSV + distance/time matrices to EVRP-TW-SPD-HMA instance format."""
 
 from __future__ import annotations
 
@@ -244,7 +244,7 @@ def convert_test_csv_to_evrp_instance(
 def _build_parser() -> argparse.ArgumentParser:
     """Build CLI parser for standalone converter usage."""
     parser = argparse.ArgumentParser(
-        description="Convert CONVOY test CSV + matrices into EVRP-TW-SPD-HMA instance file."
+        description="Convert CONVOY2 test CSV + matrices into EVRP-TW-SPD-HMA instance file."
     )
     parser.add_argument(
         "--test-csv",

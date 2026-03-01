@@ -4,7 +4,7 @@ set -euo pipefail
 # Large-customer sweep with fixed CP/EV and pretrained RL checkpoints.
 #
 # Flow:
-# 1) Pretrain + save convoy_hybrid model at 500 customers.
+# 1) Pretrain + save convoy_hybrid model at 200 customers.
 # 2) Pretrain + save convoy_rl_partial_ch model at 500 customers.
 # 3) Sweep customer-num from 200 to 1000 (step 200):
 #    - iterations=5 for 200/400/600/800
@@ -16,7 +16,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 cd "${REPO_ROOT}"
 
-PYTHON_BIN="${PYTHON_BIN:-python}"
+PYTHON_BIN="${PYTHON_BIN:-/home/akkcm/myenv/bin/python}"
 
 # CUDA allocator tuning to reduce fragmentation-related OOM.
 PYTORCH_CUDA_ALLOC_CONF="${PYTORCH_CUDA_ALLOC_CONF:-expandable_segments:True}"
@@ -27,12 +27,12 @@ COMBINED_DIST_MATRIX_CSV="${COMBINED_DIST_MATRIX_CSV:-data/distance_matrix_jd100
 COMBINED_TIME_MATRIX_CSV="${COMBINED_TIME_MATRIX_CSV:-data/time_matrix_jd1000_2.csv}"
 
 PRETRAIN_TEST_CSV="${PRETRAIN_TEST_CSV:-data/test_instance_500c_50cp.csv}"
-PRETRAIN_CUSTOMER_NUM="${PRETRAIN_CUSTOMER_NUM:-500}"
+PRETRAIN_CUSTOMER_NUM="${PRETRAIN_CUSTOMER_NUM:-200}"
 CP_NUM="${CP_NUM:-50}"
 EV_NUM="${EV_NUM:-50}"
 
 SEED="${SEED:-111}"
-EPOCHS="${EPOCHS:-200}"
+EPOCHS="${EPOCHS:-100}"
 FIXED_EVAL_EVERY="${FIXED_EVAL_EVERY:-5}"
 COST_WEIGHT="${COST_WEIGHT:-1.0}"
 
@@ -85,6 +85,7 @@ else
     "--print-solution"
     "--save-model"
     "--checkpoint-dir" "${HYBRID_CHECKPOINT_DIR}"
+    "--verbose"
   )
   printf '[CMD]'; printf ' %q' "${cmd_hybrid[@]}"; printf '\n'
   "${cmd_hybrid[@]}"

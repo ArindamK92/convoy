@@ -1,8 +1,8 @@
 # Tools
 
-Utility scripts under `CONVOY/tools` for data conversion, test-instance generation, and baseline evaluation.
+Utility scripts under `CONVOY2/tools` for data conversion, test-instance generation, and baseline evaluation.
 
-Run from repo root (`~/CONVOY`) unless noted.
+Run from repo root (`/home/akkcm/CONVOY2`) unless noted.
 
 ## File Summary
 
@@ -36,7 +36,7 @@ Notes:
 
 ```bash
 python tools/convert_data.py \
-  --input-txt ~/EVRP-TW-SPD-HMA/data/jd_instances/jd200_4.txt \
+  --input-txt /home/akkcm/EVRP-TW-SPD-HMA/data/jd_instances/jd200_4.txt \
   --output-dir data \
   --seed 123
 ```

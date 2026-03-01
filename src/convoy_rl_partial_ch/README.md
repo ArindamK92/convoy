@@ -33,7 +33,7 @@ Total RL reward is:
 
 ## Recommended Run Method
 
-Run from repo root (`~/CONVOY`) using the test shim:
+Run from repo root (`/home/akkcm/CONVOY2`) using the test shim:
 
 ```bash
 python tests/test_convoy_CPs1.py \

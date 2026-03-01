@@ -30,7 +30,7 @@ python3 convoy_main.py \
 | `--charging-stations-num` | `3` | Number of charging stations to sample/use in each iteration. |
 | `--ev-num` | `2` | Number of EVs used by all selected methods. |
 | `--iterations` | `10` | Run the full pipeline 10 times and append each iteration to the results CSV (`itr` column). |
-| `--results-file` | `jd200_itr10_cust5_1.csv` | Name of output results CSV under `CONVOY/results/` (relative path behavior). |
+| `--results-file` | `jd200_itr10_cust5_1.csv` | Name of output results CSV under `CONVOY2/results/` (relative path behavior). |
 | `--run-baseline` | enabled | Also run EVRP-TW-SPD-HMA baseline and append its metrics to results. |
 | `--opt-rl-extra` | `"--print-solution --save-model --seed 42"` | Extra args forwarded to RL runner: print solution, save model/checkpoint, and use RL seed `42`. |
 | `--opt-heu-extra` | `"--random-seed 123"` | Extra args forwarded to Opt+Heu runner: set preprocessing random seed to `123`. |

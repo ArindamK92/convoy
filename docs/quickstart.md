@@ -3,7 +3,7 @@
 ## Environment
 ```bash
 source ~/myenv/bin/activate
-cd ~/CONVOY
+cd ~/CONVOY2
 ```
 
 ## Install Docs Tooling

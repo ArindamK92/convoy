@@ -1,13 +1,13 @@
 # Tests Runners
 
-This folder contains runnable entrypoint scripts for the main CONVOY methods.
+This folder contains runnable entrypoint scripts for the main CONVOY2 methods.
 These are not unit tests; they are CLI launchers for training/evaluation pipelines.
 
 ## Setup
 
 ```bash
-source ~/myenv/bin/activate
-cd ~/CONVOY
+source /home/akkcm/myenv/bin/activate
+cd /home/akkcm/CONVOY2
 ```
 
 ## Available Runners

@@ -7,7 +7,7 @@
 
 ## Run Command
 
-Run from `~/CONVOY`:
+Run from `/home/akkcm/CONVOY2`:
 
 ```bash
 python tests/test_convoy_hybrid.py \

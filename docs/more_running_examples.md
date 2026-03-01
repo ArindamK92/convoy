@@ -1,7 +1,7 @@
 # More Running Examples
 
-Use `python` below from repo root (`~/CONVOY`).
-Activate your virtual environment first if needed (for example, `source ~/myenv/bin/activate`).
+Use `python` below from repo root (`/home/akkcm/CONVOY2`).
+If you prefer your explicit interpreter, replace `python` with `/home/akkcm/myenv/bin/python`.
 
 ## 1) Run `convoy_hybrid` only
 

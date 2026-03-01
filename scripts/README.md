@@ -6,7 +6,7 @@ This folder contains reproducible sweep/experiment launchers for `convoy_main.py
 From repo root:
 
 ```bash
-cd ~/CONVOY
+cd /home/akkcm/CONVOY2
 ./scripts/<script_name>.sh
 ```
 
