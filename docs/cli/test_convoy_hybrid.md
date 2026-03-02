@@ -1,6 +1,6 @@
-# Hybrid Test Runner (`tests/test_convoy_hybrid.py`)
+# Hybrid Test Runner (`tests/test_m_VRPTW.py`)
 
-Shim for `convoy_hybrid/convoy_hybrid_main.py`.
+Shim for `m_VRPTW/convoy_hybrid_main.py`.
 
 ## Purpose
 - Train/evaluate hybrid RL4CO CVRPTW model.
@@ -30,7 +30,7 @@ Shim for `convoy_hybrid/convoy_hybrid_main.py`.
 ### 1) Basic Hybrid Run
 
 ```bash
-python tests/test_convoy_hybrid.py \
+python tests/test_m_VRPTW.py \
   --combined-details-csv data/combined_data_jd200_1.csv \
   --combined-dist-matrix-csv data/distance_matrix_jd200_1.csv \
   --combined-time-matrix-csv data/time_matrix_jd200_1.csv \
@@ -50,7 +50,7 @@ python tests/test_convoy_hybrid.py \
 ### 2) POMO + Beam Search
 
 ```bash
-python tests/test_convoy_hybrid.py \
+python tests/test_m_VRPTW.py \
   --combined-details-csv data/combined_data_jd200_1.csv \
   --combined-dist-matrix-csv data/distance_matrix_jd200_1.csv \
   --combined-time-matrix-csv data/time_matrix_jd200_1.csv \
@@ -73,7 +73,7 @@ python tests/test_convoy_hybrid.py \
 Default compact output:
 
 ```bash
-python tests/test_convoy_hybrid.py \
+python tests/test_m_VRPTW.py \
   --combined-details-csv data/combined_data_jd200_1.csv \
   --combined-dist-matrix-csv data/distance_matrix_jd200_1.csv \
   --customer-num 50 \
@@ -83,7 +83,7 @@ python tests/test_convoy_hybrid.py \
 Verbose output:
 
 ```bash
-python tests/test_convoy_hybrid.py \
+python tests/test_m_VRPTW.py \
   --combined-details-csv data/combined_data_jd200_1.csv \
   --combined-dist-matrix-csv data/distance_matrix_jd200_1.csv \
   --customer-num 50 \

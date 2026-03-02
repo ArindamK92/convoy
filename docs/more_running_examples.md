@@ -3,12 +3,12 @@
 Use `python` below from repo root (`/home/akkcm/CONVOY2`).
 If you prefer your explicit interpreter, replace `python` with `/home/akkcm/myenv/bin/python`.
 
-## 1) Run `convoy_hybrid` only
+## 1) Run `m_VRPTW` only
 
 Use this to run hybrid directly on a 50-customer / 10-CP test setup.
 
 ```bash
-python tests/test_convoy_hybrid.py \
+python tests/test_m_VRPTW.py \
   --combined-details-csv data/combined_data_jd200_1.csv \
   --combined-dist-matrix-csv data/distance_matrix_jd200_1.csv \
   --combined-time-matrix-csv data/time_matrix_jd200_1.csv \
@@ -29,7 +29,7 @@ python tests/test_convoy_hybrid.py \
 Use this to train/evaluate hybrid and save checkpoint for later reuse.
 
 ```bash
-python tests/test_convoy_hybrid.py \
+python tests/test_m_VRPTW.py \
   --combined-details-csv data/combined_data_jd200_1.csv \
   --combined-dist-matrix-csv data/distance_matrix_jd200_1.csv \
   --combined-time-matrix-csv data/time_matrix_jd200_1.csv \
@@ -51,7 +51,7 @@ python tests/test_convoy_hybrid.py \
 Use this to switch RL algorithm to POMO and decode with beam search.
 
 ```bash
-python tests/test_convoy_hybrid.py \
+python tests/test_m_VRPTW.py \
   --combined-details-csv data/combined_data_jd200_1.csv \
   --combined-dist-matrix-csv data/distance_matrix_jd200_1.csv \
   --combined-time-matrix-csv data/time_matrix_jd200_1.csv \
@@ -71,12 +71,12 @@ python tests/test_convoy_hybrid.py \
   --checkpoint-dir checkpoints_vrptw/hybrid_c50_cp10_ev10_e100_POMO
 ```
 
-## 4) Run `convoy_rl_partial_ch` only
+## 4) Run `convoy_rl_partial_ch2` only
 
 Use this to train/evaluate only partial-charging RL and save checkpoint.
 
 ```bash
-python -m src.convoy_rl_partial_ch.convoy_rl_main \
+python -m src.convoy_rl_partial_ch2.convoy_rl_main \
   --combined-details-csv data/combined_data_jd200_1.csv \
   --combined-dist-matrix-csv data/distance_matrix_jd200_1.csv \
   --combined-time-matrix-csv data/time_matrix_jd200_1.csv \
@@ -91,7 +91,7 @@ python -m src.convoy_rl_partial_ch.convoy_rl_main \
   --seed 111 \
   --print-solution \
   --save-model \
-  --checkpoint-dir checkpoints_vrptw/rl_partial_c50_cp10_ev10_e100
+  --checkpoint-dir checkpoints_vrptw/rl_partial_ch2_c50_cp10_ev10_e100
 ```
 
 ## 5) `convoy_main` with separate checkpoint dirs (hybrid vs RL partial)
@@ -108,7 +108,7 @@ python convoy_main.py \
   --charging-stations-num 10 \
   --ev-num 10 \
   --opt-rl-extra "--save-model --epochs 100 --fixed-eval-every 5 --seed 111" \
-  --rl-checkpoint-dir checkpoints_vrptw/rl_partial_c50_cp10_ev10_e100 \
+  --rl-v2-checkpoint-dir checkpoints_vrptw/rl_partial_ch2_c50_cp10_ev10_e100 \
   --hybrid-checkpoint-dir checkpoints_vrptw/hybrid_c50_cp10_ev10_e100
 ```
 
@@ -138,7 +138,7 @@ Use these to compare methods on one fixed small test instance.
 ### 7.1 Hybrid on the same test file
 
 ```bash
-python tests/test_convoy_hybrid.py \
+python tests/test_m_VRPTW.py \
   --combined-details-csv data/combined_data_jd200_1.csv \
   --combined-dist-matrix-csv data/distance_matrix_jd200_1.csv \
   --combined-time-matrix-csv data/time_matrix_jd200_1.csv \

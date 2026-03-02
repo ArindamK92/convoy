@@ -2,17 +2,17 @@
 
 from __future__ import annotations
 
-from convoy_hybrid.convoy_hybrid_parser import parse_args
-from convoy_hybrid.convoy_hybrid_runner import run_hybrid
+from .convoy_hybrid_parser import parse_args
+from .convoy_hybrid_runner import run_hybrid
 
 
 def run_rl(args) -> dict:
-    """Compatibility alias with convoy_rl_partial_ch naming."""
+    """Compatibility alias for legacy `run_rl` callers."""
     return run_hybrid(args)
 
 
 def rl_main(args=None) -> dict:
-    """Compatibility alias with convoy_rl_partial_ch naming."""
+    """Compatibility alias for script-style legacy callers."""
     if args is None:
         args = parse_args()
     return run_hybrid(args)

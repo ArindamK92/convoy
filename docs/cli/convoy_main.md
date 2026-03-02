@@ -3,7 +3,7 @@
 Top-level parser is defined in `convoy_parser.py` (`build_main_parser`).
 
 ## Purpose
-- Run Opt+Heu, `convoy_hybrid`, and `convoy_rl_partial_ch` from one command.
+- Run Opt+Heu, `m_VRPTW`, and `convoy_rl_partial_ch2` from one command.
 - Share one dataset/sample configuration across stages.
 - Write one consolidated results CSV.
 
@@ -11,11 +11,10 @@ Top-level parser is defined in `convoy_parser.py` (`build_main_parser`).
 - Default stage order per iteration:
   1. Opt+Heu
   2. Hybrid RL
-  3. CONVOY RL partial charging
+  3. CONVOY RL-v2 partial charging
   4. Baseline (only if `--run-baseline` is set)
 - `--only-opt-heu` runs only Opt+Heu.
 - `--only-rl` skips Opt+Heu and runs RL stages.
-- `--skip-convoy-rl` skips only CONVOY RL partial charging while still running hybrid.
 - `--clear-rl-checkpoints` clears resolved checkpoint directories once before iterations start.
 
 ## Full Argument Reference
@@ -50,9 +49,9 @@ Top-level parser is defined in `convoy_parser.py` (`build_main_parser`).
 | --- | --- | --- | --- | --- |
 | `--only-rl` | flag | No | `False` | Skip Opt+Heu and run RL stages only. |
 | `--only-opt-heu` | flag | No | `False` | Skip RL stages and run Opt+Heu only. |
-| `--skip-convoy-rl` | flag | No | `False` | Skip only `convoy_rl_partial_ch`; keep hybrid stage. |
+| `--only-rl-v2` | flag | No | `False` | Run only `convoy_rl_partial_ch2` and skip Opt+Heu + hybrid. |
 | `--hybrid-checkpoint-dir` | `str` | No | `None` | Override `--checkpoint-dir` only for hybrid stage. |
-| `--rl-checkpoint-dir` | `str` | No | `None` | Override `--checkpoint-dir` only for CONVOY RL stage. |
+| `--rl-v2-checkpoint-dir` | `str` | No | `None` | Override `--checkpoint-dir` only for CONVOY RL-v2 stage. |
 | `--opt-rl-extra` | append string | No | `[]` | Quoted pass-through flags for RL/hybrid parser. Can be repeated. |
 | `--opt-heu-extra` | append string | No | `[]` | Quoted pass-through flags for Opt+Heu parser. Can be repeated. |
 
@@ -92,7 +91,7 @@ python convoy_main.py \
   --opt-heu-extra "--random-seed 111 --skip-optimal" \
   --opt-rl-extra "--save-model --seed 111 --epochs 100 --fixed-eval-every 5" \
   --hybrid-checkpoint-dir checkpoints_vrptw/hybrid_c50_cp10_ev10_e100 \
-  --rl-checkpoint-dir checkpoints_vrptw/rl_partial_c50_cp10_ev10_e100
+  --rl-v2-checkpoint-dir checkpoints_vrptw/rl_partial_ch2_c50_cp10_ev10_e100
 ```
 
 ### 2) RL Stages Only (Hybrid + CONVOY RL)
@@ -109,7 +108,7 @@ python convoy_main.py \
   --opt-rl-extra "--test-csv data/test_instance_50c_10cp.csv --test-distance-matrix-csv data/distance_matrix_jd200_1.csv --test-time-matrix-csv data/time_matrix_jd200_1.csv --save-model --seed 111"
 ```
 
-### 3) Hybrid Only
+### 3) RL-v2 Only
 
 ```bash
 python convoy_main.py \
@@ -119,10 +118,9 @@ python convoy_main.py \
   --customer-num 50 \
   --charging-stations-num 10 \
   --ev-num 10 \
-  --only-rl \
-  --skip-convoy-rl \
+  --only-rl-v2 \
   --opt-rl-extra "--test-csv data/test_instance_50c_10cp.csv --test-distance-matrix-csv data/distance_matrix_jd200_1.csv --test-time-matrix-csv data/time_matrix_jd200_1.csv --save-model --seed 111 --epochs 100 --fixed-eval-every 5" \
-  --hybrid-checkpoint-dir checkpoints_vrptw/hybrid_c50_cp10_ev10_e100
+  --rl-v2-checkpoint-dir checkpoints_vrptw/rl_partial_ch2_c50_cp10_ev10_e100
 ```
 
 ### 4) Heuristics Only (Opt+Heu without MILP)
@@ -166,6 +164,6 @@ python convoy_main.py \
   - `--baseline-extra "--g_1 20 --pop_size 4"`
 - In `convoy_main`, `--print-solution` is removed for the hybrid stage timing path so hybrid elapsed time excludes printing overhead.
 - For full RL/hybrid/opt+heu inner argument lists, use:
-  - `convoy_hybrid/README.md`
-  - `src/convoy_rl_partial_ch/README.md`
+  - `m_VRPTW/README.md`
+  - `src/convoy_rl_partial_ch2/README.md`
   - `tests/README.md`

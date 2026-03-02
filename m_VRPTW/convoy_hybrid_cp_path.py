@@ -6,9 +6,9 @@ from dataclasses import dataclass
 
 import torch
 
-from src.convoy_rl_partial_ch.myparser import parse_customer, parse_distance_matrix_csv
+from src.convoy_rl_partial_ch2.myparser import parse_customer, parse_distance_matrix_csv
 
-from convoy_hybrid.convoy_hybrid_kdtree import create_kd_tree, find_nearest_cp
+from .convoy_hybrid_kdtree import create_kd_tree, find_nearest_cp
 
 
 @dataclass

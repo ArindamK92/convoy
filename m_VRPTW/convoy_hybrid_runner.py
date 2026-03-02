@@ -2,9 +2,17 @@
 
 from __future__ import annotations
 
+import io
+import logging
 import os
 import shutil
 import time
+import warnings
+from contextlib import redirect_stderr, redirect_stdout
+
+# Avoid noisy CUDA-device warnings in mixed CPU/GPU environments.
+warnings.filterwarnings("ignore", message=".*Can't initialize NVML.*")
+warnings.filterwarnings("ignore", message=".*CUDA initialization: Unexpected error.*")
 
 import lightning as L
 import torch
@@ -14,24 +22,24 @@ from rl4co.models import AttentionModel, POMO
 from rl4co.utils import RL4COTrainer
 from torch.serialization import add_safe_globals
 
-from src.convoy_rl_partial_ch.csv_customer_pool_generator import CSVCustomerPoolGenerator
-from src.convoy_rl_partial_ch.eval_utils import evaluate_policy_on_dataset
-from src.convoy_rl_partial_ch.fixed_eval_callback import FixedSetEvalCallback
-from src.convoy_rl_partial_ch.helper import print_quality_table
+from src.convoy_rl_partial_ch2.csv_customer_pool_generator import CSVCustomerPoolGenerator
+from src.convoy_rl_partial_ch2.eval_utils import evaluate_policy_on_dataset
+from src.convoy_rl_partial_ch2.fixed_eval_callback import FixedSetEvalCallback
+from src.convoy_rl_partial_ch2.helper import print_quality_table
 
-from convoy_hybrid_v2.convoy_hybrid_dataset import FixedInstanceDataset
-from convoy_hybrid_v2.convoy_hybrid_decode import decode_and_print_solution
-from convoy_hybrid_v2.convoy_hybrid_env import MatrixCVRPTWEnv
-from convoy_hybrid_v2.convoy_hybrid_instance_loader import (
+from .convoy_hybrid_dataset import FixedInstanceDataset
+from .convoy_hybrid_decode import decode_and_print_solution
+from .convoy_hybrid_env import MatrixCVRPTWEnv
+from .convoy_hybrid_instance_loader import (
     build_fixed_instance,
     load_customers_only_instance_from_csv,
 )
-from convoy_hybrid_v2.convoy_hybrid_model import (
+from .convoy_hybrid_model import (
     build_decode_kwargs,
     build_model,
     format_decode_kwargs,
 )
-from convoy_hybrid_v2.convoy_hybrid_parser import validate_decode_args, validate_rl_algo_args
+from .convoy_hybrid_parser import validate_decode_args, validate_rl_algo_args
 
 
 def _print_compatibility_notes(args) -> None:
@@ -46,18 +54,18 @@ def _print_compatibility_notes(args) -> None:
         print("Compatibility note: --cost-weight is ignored in hybrid mode.")
     if args.ev_energy_rate_kwh_per_distance != 0.00025:
         print(
-            "Compatibility note: --ev-energy-rate-kwh-per-distance is used in hybrid env SoC dynamics and trace."
+            "Compatibility note: --ev-energy-rate-kwh-per-distance is used only for output trace."
         )
     if args.ev_charge_rate_kwh_per_hour != 120.0:
         print(
-            "Compatibility note: --ev-charge-rate-kwh-per-hour is used in hybrid env SoC dynamics and trace."
+            "Compatibility note: --ev-charge-rate-kwh-per-hour is used only for output trace."
         )
     if args.ev_battery_capacity_kwh != 30.0:
         print(
-            "Compatibility note: --ev-battery-capacity-kwh is used in hybrid env SoC dynamics and trace."
+            "Compatibility note: --ev-battery-capacity-kwh is used only for output trace."
         )
     if args.ev_reserve_soc_kwh != 0.0:
-        print("Compatibility note: --reserve-battery is used in hybrid env SoC dynamics and trace.")
+        print("Compatibility note: --reserve-battery is used only for output trace.")
 
 
 def _build_trace_settings(args) -> dict:
@@ -71,20 +79,62 @@ def _build_trace_settings(args) -> dict:
     }
 
 
+def _run_with_optional_silence(fn, *args, silent: bool = False, **kwargs):
+    """Run `fn` optionally with stdout/stderr suppressed."""
+    if not silent:
+        return fn(*args, **kwargs)
+    with redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
+        return fn(*args, **kwargs)
+
+
+def _checkpoint_map_location(accelerator: str):
+    """Map CUDA checkpoints safely when GPU is unavailable or unused."""
+    if accelerator == "gpu" and torch.cuda.is_available():
+        return None
+    return torch.device("cpu")
+
+
 def run_hybrid(args) -> dict:
     """Train/evaluate hybrid runner with fixed train/val instance and CSV test."""
+    verbose = bool(getattr(args, "verbose", False))
+    vprint = print if verbose else (lambda *_args, **_kwargs: None)
+    if not verbose:
+        warnings.filterwarnings("ignore")
+        warnings.filterwarnings("ignore", message=".*Can't initialize NVML.*")
+        warnings.filterwarnings(
+            "ignore", message=".*CUDA initialization: Unexpected error.*"
+        )
+        for logger_name in [
+            "lightning",
+            "lightning.pytorch",
+            "pytorch_lightning",
+            "rl4co",
+        ]:
+            logging.getLogger(logger_name).setLevel(logging.ERROR)
+
     validate_decode_args(args)
     validate_rl_algo_args(args)
     if int(args.ev_num) <= 0:
         raise ValueError("--ev-num must be >= 1.")
     decode_kwargs = build_decode_kwargs(args)
     trace_settings = _build_trace_settings(args)
-    L.seed_everything(args.seed, workers=True)
+    _run_with_optional_silence(
+        L.seed_everything,
+        args.seed,
+        workers=True,
+        verbose=verbose,
+        silent=not verbose,
+    )
 
     if args.accelerator == "auto":
-        accelerator = "gpu" if torch.cuda.is_available() else "cpu"
+        accelerator = (
+            "gpu"
+            if _run_with_optional_silence(torch.cuda.is_available, silent=not verbose)
+            else "cpu"
+        )
     else:
         accelerator = args.accelerator
+    checkpoint_map_location = _checkpoint_map_location(accelerator)
 
     # Pool generator already uses only customer nodes (type='c') for instance creation.
     pool_generator = CSVCustomerPoolGenerator(
@@ -100,10 +150,6 @@ def run_hybrid(args) -> dict:
         generator=pool_generator,
         check_solution=False,
         num_evs=int(args.ev_num),
-        battery_capacity_kwh=float(args.ev_battery_capacity_kwh),
-        reserve_soc_kwh=float(args.ev_reserve_soc_kwh),
-        energy_rate_kwh_per_distance=float(args.ev_energy_rate_kwh_per_distance),
-        default_cp_charge_rate_kwh_per_hour=float(args.ev_charge_rate_kwh_per_hour),
     )
     td_fixed, fixed_ignored_cp_count = build_fixed_instance(env, args)
     fixed_sample = td_fixed[0].clone()
@@ -145,9 +191,11 @@ def run_hybrid(args) -> dict:
         every_n_epochs=args.fixed_eval_every,
         eval_fn=evaluate_policy_on_dataset,
         decode_kwargs=decode_kwargs,
+        verbose=verbose,
     )
 
-    trainer = RL4COTrainer(
+    trainer = _run_with_optional_silence(
+        RL4COTrainer,
         accelerator=accelerator,
         devices=1,
         max_epochs=args.epochs,
@@ -156,6 +204,8 @@ def run_hybrid(args) -> dict:
         callbacks=[checkpoint_callback, fixed_eval_callback],
         enable_checkpointing=True,
         enable_model_summary=False,
+        enable_progress_bar=verbose,
+        silent=not verbose,
     )
 
     fixed_history: list[tuple[int, float]] = []
@@ -168,9 +218,14 @@ def run_hybrid(args) -> dict:
     if args.save_model and os.path.exists(saved_best_ckpt_path):
         run_mode = "load_saved"
         best_ckpt_path = saved_best_ckpt_path
-        print(f"Found saved best checkpoint: {saved_best_ckpt_path}. Skipping training.")
-        model_for_solution = model_cls.load_from_checkpoint(
-            best_ckpt_path, env=env, weights_only=False
+        vprint(f"Found saved best checkpoint: {saved_best_ckpt_path}. Skipping training.")
+        model_for_solution = _run_with_optional_silence(
+            model_cls.load_from_checkpoint,
+            best_ckpt_path,
+            env=env,
+            weights_only=False,
+            map_location=checkpoint_map_location,
+            silent=not verbose,
         )
         initial_fixed_reward = evaluate_policy_on_dataset(
             model_for_solution,
@@ -198,7 +253,7 @@ def run_hybrid(args) -> dict:
             args.eval_batch_size,
             decode_kwargs=decode_kwargs,
         )
-        trainer.fit(model)
+        _run_with_optional_silence(trainer.fit, model, silent=not verbose)
         fixed_history = fixed_eval_callback.history
         best_ckpt_path = checkpoint_callback.best_model_path
         if not best_ckpt_path:
@@ -209,10 +264,15 @@ def run_hybrid(args) -> dict:
             if os.path.abspath(best_ckpt_path) != os.path.abspath(saved_best_ckpt_path):
                 shutil.copyfile(best_ckpt_path, saved_best_ckpt_path)
             best_ckpt_path = saved_best_ckpt_path
-            print(f"Saved best checkpoint: {best_ckpt_path}")
+            vprint(f"Saved best checkpoint: {best_ckpt_path}")
 
-        model_for_solution = model_cls.load_from_checkpoint(
-            best_ckpt_path, env=env, weights_only=False
+        model_for_solution = _run_with_optional_silence(
+            model_cls.load_from_checkpoint,
+            best_ckpt_path,
+            env=env,
+            weights_only=False,
+            map_location=checkpoint_map_location,
+            silent=not verbose,
         )
         best_ckpt_fixed_reward = evaluate_policy_on_dataset(
             model_for_solution,
@@ -239,40 +299,42 @@ def run_hybrid(args) -> dict:
         )
 
     if run_mode == "load_saved":
-        print("Loaded saved model and finished testing.")
+        vprint("Loaded saved model and finished testing.")
     else:
-        print("Finished training and testing.")
-    print(f"Accelerator: {accelerator}")
-    print("Mode: RL4CO CVRPTW on depot+customers only (CP rows ignored).")
-    print(f"RL algorithm: {args.rl_algo}")
-    print(
+        vprint("Finished training and testing.")
+    vprint(f"Accelerator: {accelerator}")
+    vprint("Mode: RL4CO CVRPTW on depot+customers only (CP rows ignored).")
+    vprint(f"RL algorithm: {args.rl_algo}")
+    vprint(
         "Training pool source: "
         f"csv={args.combined_details_csv}, customer_num={args.customer_num}"
     )
-    _print_compatibility_notes(args)
+    if verbose:
+        _print_compatibility_notes(args)
     if args.fixed_instance_csv:
-        print(f"Fixed train/val instance: csv={args.fixed_instance_csv}")
+        vprint(f"Fixed train/val instance: csv={args.fixed_instance_csv}")
         if fixed_ignored_cp_count > 0:
-            print(
+            vprint(
                 "Fixed train/val instance CP rows ignored: "
                 f"{fixed_ignored_cp_count}"
             )
     else:
-        print(
+        vprint(
             "Fixed train/val instance: sampled once from combined pool "
             f"(seed={args.fixed_instance_seed})"
         )
-    print("Decoder config: " + format_decode_kwargs(decode_kwargs))
-    print(f"Best checkpoint: {best_ckpt_path if best_ckpt_path else 'not found'}")
-    print(f"Test reward: {test_reward:.6f}")
-    print(f"All test metrics: {metrics}")
-    print_quality_table(
-        initial_reward=initial_fixed_reward,
-        fixed_history=fixed_history,
-        best_ckpt_reward=best_ckpt_fixed_reward,
-        final_model_reward=final_fixed_reward,
-        best_test_reward=best_test_reward,
-    )
+    vprint("Decoder config: " + format_decode_kwargs(decode_kwargs))
+    vprint(f"Best checkpoint: {best_ckpt_path if best_ckpt_path else 'not found'}")
+    vprint(f"Test reward: {test_reward:.6f}")
+    vprint(f"All test metrics: {metrics}")
+    if verbose:
+        print_quality_table(
+            initial_reward=initial_fixed_reward,
+            fixed_history=fixed_history,
+            best_ckpt_reward=best_ckpt_fixed_reward,
+            final_model_reward=final_fixed_reward,
+            best_test_reward=best_test_reward,
+        )
 
     csv_reward = None
     csv_visited_ids = None
@@ -322,6 +384,7 @@ def run_hybrid(args) -> dict:
             decode_kwargs=decode_kwargs,
             trace_settings=trace_settings,
             cp_postprocess_settings=cp_postprocess_settings,
+            verbose=verbose,
         )
         csv_inference_time_ms = (time.perf_counter() - infer_start) * 1000.0
         csv_reward = float(custom_result["reward"])
@@ -365,11 +428,28 @@ def run_hybrid(args) -> dict:
             csv_augmented_total_successful_delivery = (
                 csv_augmented_full_total_successful_delivery
             )
-        if ignored_cp_count > 0:
-            print(f"Ignored CP rows from test CSV: {ignored_cp_count}")
-        print(f"CSV test distance source (trace): matrix ({test_dist_csv})")
-        print(f"CSV test travel-time source (trace): matrix ({test_time_csv})")
-        print(f"CSV instance RL4CO reward: {csv_reward:.6f}")
+            if not verbose:
+                print(
+                    "Reward components (CP-augmented full charging): "
+                    f"total_reward={csv_augmented_full_total_reward:.6f}, "
+                    f"total_cost={csv_augmented_full_total_cost:.6f}, "
+                    f"successful_delivery={csv_augmented_full_total_successful_delivery}, "
+                    f"objective={csv_augmented_full_objective_val:.6f}"
+                )
+                if csv_augmented_partial_total_reward is not None:
+                    print(
+                        "Reward components (CP-augmented partial charging): "
+                        f"total_reward={csv_augmented_partial_total_reward:.6f}, "
+                        f"total_cost={csv_augmented_partial_total_cost:.6f}, "
+                        f"successful_delivery={csv_augmented_partial_total_successful_delivery}, "
+                        f"objective={csv_augmented_partial_objective_val:.6f}"
+                    )
+        if verbose:
+            if ignored_cp_count > 0:
+                print(f"Ignored CP rows from test CSV: {ignored_cp_count}")
+            print(f"CSV test distance source (trace): matrix ({test_dist_csv})")
+            print(f"CSV test travel-time source (trace): matrix ({test_time_csv})")
+            print(f"CSV instance RL4CO reward: {csv_reward:.6f}")
         print(f"CSV instance inference time: {csv_inference_time_ms:.2f} ms")
     elif args.print_solution:
         decode_and_print_solution(
@@ -379,6 +459,7 @@ def run_hybrid(args) -> dict:
             title="One fixed-instance solution",
             decode_kwargs=decode_kwargs,
             trace_settings=trace_settings,
+            verbose=verbose,
         )
 
     return {

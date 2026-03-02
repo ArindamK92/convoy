@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import torch
 
-from convoy_hybrid.convoy_hybrid_cp_path import augment_path_with_nearest_cp
+from .convoy_hybrid_cp_path import augment_path_with_nearest_cp
 
 
 def split_routes(actions_1d: torch.Tensor) -> list[list[int]]:

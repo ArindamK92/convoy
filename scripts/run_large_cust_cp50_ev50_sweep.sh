@@ -4,8 +4,8 @@ set -euo pipefail
 # Large-customer sweep with fixed CP/EV and pretrained RL checkpoints.
 #
 # Flow:
-# 1) Pretrain + save convoy_hybrid model at 200 customers.
-# 2) Pretrain + save convoy_rl_partial_ch model at 500 customers.
+# 1) Pretrain + save m_VRPTW model at 200 customers.
+# 2) Pretrain + save convoy_rl_partial_ch2 model at 500 customers.
 # 3) Sweep customer-num from 200 to 1000 (step 200):
 #    - iterations=5 for 200/400/600/800
 #    - iterations=1 for 1000
@@ -63,13 +63,13 @@ echo "PYTORCH_CUDA_ALLOC_CONF: ${PYTORCH_CUDA_ALLOC_CONF}"
 echo "Batch sizes: train=${BATCH_SIZE}, eval=${EVAL_BATCH_SIZE}"
 
 echo
-echo "=== Step 1: Pretrain + save convoy_hybrid checkpoint ==="
+echo "=== Step 1: Pretrain + save m_VRPTW checkpoint ==="
 hybrid_best_ckpt="${HYBRID_CHECKPOINT_DIR}/best_model_hybrid.ckpt"
 if [[ -f "${hybrid_best_ckpt}" ]]; then
   echo "[SKIP] Found existing hybrid checkpoint: ${hybrid_best_ckpt}"
 else
   cmd_hybrid=(
-    "${PYTHON_BIN}" "tests/test_convoy_hybrid.py"
+    "${PYTHON_BIN}" "tests/test_m_VRPTW.py"
     "--combined-details-csv" "${COMBINED_DETAILS_CSV}"
     "--combined-dist-matrix-csv" "${COMBINED_DIST_MATRIX_CSV}"
     "--combined-time-matrix-csv" "${COMBINED_TIME_MATRIX_CSV}"
@@ -92,13 +92,13 @@ else
 fi
 
 echo
-echo "=== Step 2: Pretrain + save convoy_rl_partial_ch checkpoint ==="
+echo "=== Step 2: Pretrain + save convoy_rl_partial_ch2 checkpoint ==="
 rl_best_ckpt="${RL_CHECKPOINT_DIR}/best_model.ckpt"
 if [[ -f "${rl_best_ckpt}" ]]; then
   echo "[SKIP] Found existing RL checkpoint: ${rl_best_ckpt}"
 else
   cmd_rl=(
-    "${PYTHON_BIN}" "tests/test_convoy_CPs1.py"
+    "${PYTHON_BIN}" "tests/test_convoy_CPs1_ch2.py"
     "--combined-details-csv" "${COMBINED_DETAILS_CSV}"
     "--combined-dist-matrix-csv" "${COMBINED_DIST_MATRIX_CSV}"
     "--combined-time-matrix-csv" "${COMBINED_TIME_MATRIX_CSV}"
@@ -145,7 +145,7 @@ for cust_num in $(seq "${CUST_START}" "${CUST_STEP}" "${CUST_END}"); do
     "--opt-rl-extra" "${RL_EXTRA}"
     "--opt-heu-extra" "${OPT_HEU_EXTRA}"
     "--hybrid-checkpoint-dir" "${HYBRID_CHECKPOINT_DIR}"
-    "--rl-checkpoint-dir" "${RL_CHECKPOINT_DIR}"
+    "--rl-v2-checkpoint-dir" "${RL_CHECKPOINT_DIR}"
   )
 
   echo

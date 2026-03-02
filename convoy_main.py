@@ -2,7 +2,7 @@
 
 This runner combines:
 - `convoy_opt_and_heu` (Optimal + CSA heuristic),
-- `convoy_rl_partial_ch` (RL training/testing + partial-charge evaluation),
+- `m_VRPTW` (hybrid RL4CO training/testing + partial-charge evaluation),
 - `convoy_rl_partial_ch2` (RL-v2 training/testing + partial-charge evaluation),
 - optional EVRP baseline pipeline,
 
@@ -20,7 +20,6 @@ from convoy_parser import (
     parse_extra_args,
     parse_hybrid_args,
     parse_opt_heu_args,
-    parse_rl_args,
     parse_rl_v2_args,
 )
 
@@ -231,9 +230,8 @@ def main():
     Execution order per iteration:
     1) optional Optimal/Heuristic (also generates `test_instance.csv`),
     2) optional Hybrid RL4CO stage,
-    3) optional convoy RL stage,
-    4) optional convoy RL-v2 stage,
-    5) optional Baseline pipeline (same instance + EV count).
+    3) optional convoy RL-v2 stage,
+    4) optional Baseline pipeline (same instance + EV count).
     """
     args = parse_args()
     only_modes = [
@@ -251,13 +249,15 @@ def main():
     if getattr(args, "only_rl_v2", False):
         run_opt_heu = False
         run_hybrid = False
-        run_rl = False
         run_rl_v2 = True
     else:
         run_hybrid = not args.only_opt_heu
-        run_rl = run_hybrid and (not args.skip_convoy_rl)
         run_opt_heu = not args.only_rl
-        run_rl_v2 = False
+        if args.only_rl:
+            # only-rl mode executes hybrid + RL-v2 only.
+            run_rl_v2 = True
+        else:
+            run_rl_v2 = run_hybrid
     run_baseline = bool(getattr(args, "run_baseline", False))
 
     repo_root = os.path.dirname(os.path.abspath(__file__))
@@ -270,10 +270,6 @@ def main():
     opt_extra_raw = parse_extra_args(args.opt_heu_extra)
     rl_extra_args = parse_extra_args(args.opt_rl_extra)
     rl_v2_extra_args = parse_extra_args(args.opt_rl_extra)
-    if getattr(args, "rl_checkpoint_dir", None):
-        rl_extra_args = _set_flag_value(
-            rl_extra_args, "--checkpoint-dir", args.rl_checkpoint_dir
-        )
     if getattr(args, "rl_v2_checkpoint_dir", None):
         rl_v2_extra_args = _set_flag_value(
             rl_v2_extra_args, "--checkpoint-dir", args.rl_v2_checkpoint_dir
@@ -287,15 +283,13 @@ def main():
     baseline_extra_args = parse_extra_args(getattr(args, "baseline_extra", []))
     if run_hybrid and _contains_flag(rl_extra_args, "--print-solution"):
         print(
-            "Hybrid timing note: --print-solution is ignored for convoy_hybrid "
+            "Hybrid timing note: --print-solution is ignored for m_VRPTW "
             "inside convoy_main so elapsed time excludes printing overhead."
         )
 
     # Optional cleanup so RL always retrains from scratch.
     if args.clear_rl_checkpoints:
         checkpoint_dirs = []
-        if run_rl:
-            checkpoint_dirs.append(_resolve_rl_checkpoint_dir(repo_root, rl_extra_args))
         if run_rl_v2:
             checkpoint_dirs.append(_resolve_rl_checkpoint_dir(repo_root, rl_v2_extra_args))
         if run_hybrid:
@@ -346,7 +340,7 @@ def main():
             for row in opt_rows:
                 row["itr"] = itr
             iter_rows.extend(opt_rows)
-        elif run_hybrid or run_rl or run_rl_v2 or run_baseline:
+        elif run_hybrid or run_rl_v2 or run_baseline:
             # Ensure RL-only / Baseline-only runs still regenerate test_instance.csv
             # according to shared sampling arguments.
             _generate_test_instance_csv(args, opt_extra_raw, itr)
@@ -357,8 +351,8 @@ def main():
                     )
                 )
 
-        if run_hybrid and not run_rl:
-            from convoy_hybrid.convoy_hybrid_main import run_rl as run_hybrid
+        if run_hybrid:
+            from m_VRPTW.convoy_hybrid_main import run_rl as run_hybrid
 
             auto_test_csv = None
             if os.path.isfile(generated_test_csv):
@@ -372,7 +366,7 @@ def main():
                 hybrid_namespace.seed = int(hybrid_namespace.seed) + (itr - 1)
                 hybrid_cli_args = [*hybrid_cli_args, "--seed", str(hybrid_namespace.seed)]
             # Print a reproducible CLI preview only (does not execute a shell command).
-            _print_cmd("convoy_hybrid", hybrid_cli_args)
+            _print_cmd("m_VRPTW", hybrid_cli_args)
             # Execute hybrid runner directly in-process and capture its returned metrics dict.
             hybrid_summary = run_hybrid(hybrid_namespace)
 
@@ -525,294 +519,6 @@ def main():
                         if hybrid_partial_avg_cost != ""
                         else hybrid_full_avg_cost
                     ),
-                }
-            )
-
-        if run_rl:
-            from convoy_hybrid.convoy_hybrid_main import run_rl as run_hybrid
-            from src.convoy_rl_partial_ch.convoy_rl_main import run_rl
-
-            auto_test_csv = None
-            if os.path.isfile(generated_test_csv):
-                auto_test_csv = generated_test_csv
-
-            # Run hybrid first (same argument style as RL), then convoy_rl_partial_ch.
-            # Both are direct Python calls, not subprocess invocations.
-            hybrid_namespace, hybrid_cli_args = parse_hybrid_args(
-                args, hybrid_extra_args, auto_test_csv=auto_test_csv
-            )
-            if args.iterations > 1 and not _contains_flag(hybrid_extra_args, "--seed"):
-                hybrid_namespace.seed = int(hybrid_namespace.seed) + (itr - 1)
-                hybrid_cli_args = [*hybrid_cli_args, "--seed", str(hybrid_namespace.seed)]
-            # Print a reproducible CLI preview only (does not execute a shell command).
-            _print_cmd("convoy_hybrid", hybrid_cli_args)
-            # Execute hybrid runner directly in-process and capture its returned metrics dict.
-            hybrid_summary = run_hybrid(hybrid_namespace)
-
-            hybrid_elapsed_ms = None
-            hybrid_full_total_reward = None
-            hybrid_full_total_cost = None
-            hybrid_full_objective_val = None
-            hybrid_full_total_successful_delivery = None
-            hybrid_partial_total_reward = None
-            hybrid_partial_total_cost = None
-            hybrid_partial_objective_val = None
-            hybrid_partial_total_successful_delivery = None
-            # Extract elapsed-time/objective metrics produced by hybrid runner for results CSV.
-            if isinstance(hybrid_summary, dict):
-                hybrid_elapsed_ms = hybrid_summary.get("csv_inference_time_ms")
-                hybrid_full_total_reward = hybrid_summary.get(
-                    "csv_augmented_full_total_reward"
-                )
-                hybrid_full_total_cost = hybrid_summary.get("csv_augmented_full_total_cost")
-                hybrid_full_objective_val = hybrid_summary.get(
-                    "csv_augmented_full_objective_val"
-                )
-                hybrid_full_total_successful_delivery = hybrid_summary.get(
-                    "csv_augmented_full_total_successful_delivery"
-                )
-                hybrid_partial_total_reward = hybrid_summary.get(
-                    "csv_augmented_partial_total_reward"
-                )
-                hybrid_partial_total_cost = hybrid_summary.get(
-                    "csv_augmented_partial_total_cost"
-                )
-                hybrid_partial_objective_val = hybrid_summary.get(
-                    "csv_augmented_partial_objective_val"
-                )
-                hybrid_partial_total_successful_delivery = hybrid_summary.get(
-                    "csv_augmented_partial_total_successful_delivery"
-                )
-
-                if hybrid_full_total_reward is None:
-                    hybrid_full_total_reward = hybrid_summary.get("csv_augmented_total_reward")
-                if hybrid_full_total_cost is None:
-                    hybrid_full_total_cost = hybrid_summary.get("csv_augmented_total_cost")
-                if hybrid_full_objective_val is None:
-                    hybrid_full_objective_val = hybrid_summary.get("csv_augmented_objective_val")
-                if hybrid_full_total_successful_delivery is None:
-                    hybrid_full_total_successful_delivery = hybrid_summary.get(
-                        "csv_augmented_total_successful_delivery"
-                    )
-                if hybrid_full_objective_val is None:
-                    hybrid_full_objective_val = hybrid_summary.get("csv_instance_reward")
-
-            hybrid_full_avg_cost = ""
-            if (
-                hybrid_full_total_cost is not None
-                and hybrid_full_total_successful_delivery is not None
-            ):
-                hybrid_full_avg_cost = _safe_avg(
-                    hybrid_full_total_cost, hybrid_full_total_successful_delivery
-                )
-            iter_rows.append(
-                {
-                    "itr": itr,
-                    "method": "Hybrid_RL4CO",
-                    "total_delivery": args.customer_num,
-                    "total_cp": args.charging_stations_num,
-                    "total_ev": args.ev_num,
-                    "delivery2ev_ratio": args.customer_num / args.ev_num,
-                    "elapsed_time_ms": (
-                        hybrid_elapsed_ms if hybrid_elapsed_ms is not None else ""
-                    ),
-                    "total_reward": (
-                        hybrid_full_total_reward
-                        if hybrid_full_total_reward is not None
-                        else ""
-                    ),
-                    "total_cost": (
-                        hybrid_full_total_cost if hybrid_full_total_cost is not None else ""
-                    ),
-                    "objective_val": (
-                        hybrid_full_objective_val
-                        if hybrid_full_objective_val is not None
-                        else ""
-                    ),
-                    "total_successful_delivery": (
-                        hybrid_full_total_successful_delivery
-                        if hybrid_full_total_successful_delivery is not None
-                        else ""
-                    ),
-                    "avg_cost_per_successful_delivery": hybrid_full_avg_cost,
-                }
-            )
-
-            hybrid_partial_avg_cost = ""
-            if (
-                hybrid_partial_total_cost is not None
-                and hybrid_partial_total_successful_delivery is not None
-            ):
-                hybrid_partial_avg_cost = _safe_avg(
-                    hybrid_partial_total_cost, hybrid_partial_total_successful_delivery
-                )
-            iter_rows.append(
-                {
-                    "itr": itr,
-                    "method": "Hybrid_RL4CO_partial_charging",
-                    "total_delivery": args.customer_num,
-                    "total_cp": args.charging_stations_num,
-                    "total_ev": args.ev_num,
-                    "delivery2ev_ratio": args.customer_num / args.ev_num,
-                    "elapsed_time_ms": (
-                        hybrid_elapsed_ms if hybrid_elapsed_ms is not None else ""
-                    ),
-                    "total_reward": (
-                        hybrid_partial_total_reward
-                        if hybrid_partial_total_reward is not None
-                        else (
-                            hybrid_full_total_reward
-                            if hybrid_full_total_reward is not None
-                            else ""
-                        )
-                    ),
-                    "total_cost": (
-                        hybrid_partial_total_cost
-                        if hybrid_partial_total_cost is not None
-                        else (
-                            hybrid_full_total_cost
-                            if hybrid_full_total_cost is not None
-                            else ""
-                        )
-                    ),
-                    "objective_val": (
-                        hybrid_partial_objective_val
-                        if hybrid_partial_objective_val is not None
-                        else (
-                            hybrid_full_objective_val
-                            if hybrid_full_objective_val is not None
-                            else ""
-                        )
-                    ),
-                    "total_successful_delivery": (
-                        hybrid_partial_total_successful_delivery
-                        if hybrid_partial_total_successful_delivery is not None
-                        else (
-                            hybrid_full_total_successful_delivery
-                            if hybrid_full_total_successful_delivery is not None
-                            else ""
-                        )
-                    ),
-                    "avg_cost_per_successful_delivery": (
-                        hybrid_partial_avg_cost
-                        if hybrid_partial_avg_cost != ""
-                        else hybrid_full_avg_cost
-                    ),
-                }
-            )
-
-            # Build a Namespace for convoy_rl_partial_ch from top-level args + --opt-rl-extra.
-            rl_namespace, rl_cli_args = parse_rl_args(
-                args, rl_extra_args, auto_test_csv=auto_test_csv
-            )
-            if args.iterations > 1 and not _contains_flag(rl_extra_args, "--seed"):
-                rl_namespace.seed = int(rl_namespace.seed) + (itr - 1)
-                rl_cli_args = [*rl_cli_args, "--seed", str(rl_namespace.seed)]
-            # Print a reproducible CLI preview only (does not execute a shell command).
-            _print_cmd("convoy_rl_partial_ch", rl_cli_args)
-            # Execute convoy_rl_partial_ch directly in-process and capture returned metrics dict.
-            rl_summary = run_rl(rl_namespace)
-
-            # RL metrics with partial-charging post-processing
-            rl_total_reward = None
-            rl_total_cost = None
-            rl_objective_val = None
-            rl_total_successful_delivery = None
-            rl_inference_time_ms = None
-            # RL metrics before partial charging (full-charge trace decomposition)
-            rl_full_total_reward = None
-            rl_full_total_cost = None
-            rl_full_objective_val = None
-            rl_full_total_successful_delivery = None
-            if isinstance(rl_summary, dict):
-                rl_total_reward = rl_summary.get("csv_total_reward")
-                rl_total_cost = rl_summary.get("csv_total_cost")
-                rl_objective_val = rl_summary.get("csv_objective_val")
-                rl_total_successful_delivery = rl_summary.get(
-                    "csv_total_successful_delivery"
-                )
-                if rl_objective_val is None:
-                    rl_objective_val = rl_summary.get("csv_instance_reward")
-                if rl_objective_val is None:
-                    rl_objective_val = rl_summary.get("test_reward")
-                rl_inference_time_ms = rl_summary.get("csv_inference_time_ms")
-                rl_full_total_reward = rl_summary.get("csv_full_charge_total_reward")
-                rl_full_total_cost = rl_summary.get("csv_full_charge_total_cost")
-                rl_full_objective_val = rl_summary.get("csv_full_charge_objective_val")
-                rl_full_total_successful_delivery = rl_summary.get(
-                    "csv_full_charge_total_successful_delivery"
-                )
-
-            rl_avg_cost = ""
-            if rl_total_cost is not None and rl_total_successful_delivery is not None:
-                rl_avg_cost = _safe_avg(rl_total_cost, rl_total_successful_delivery)
-
-            # Row 1: RL reward components before partial charging.
-            if (
-                rl_full_total_reward is not None
-                or rl_full_total_cost is not None
-                or rl_full_objective_val is not None
-            ):
-                rl_full_avg_cost = ""
-                if (
-                    rl_full_total_cost is not None
-                    and rl_full_total_successful_delivery is not None
-                ):
-                    rl_full_avg_cost = _safe_avg(
-                        rl_full_total_cost, rl_full_total_successful_delivery
-                    )
-                iter_rows.append(
-                    {
-                        "itr": itr,
-                        "method": "RL",
-                        "total_delivery": args.customer_num,
-                        "total_cp": args.charging_stations_num,
-                        "total_ev": args.ev_num,
-                        "delivery2ev_ratio": args.customer_num / args.ev_num,
-                        "elapsed_time_ms": (
-                            rl_inference_time_ms if rl_inference_time_ms is not None else ""
-                        ),
-                        "total_reward": (
-                            rl_full_total_reward if rl_full_total_reward is not None else ""
-                        ),
-                        "total_cost": (
-                            rl_full_total_cost if rl_full_total_cost is not None else ""
-                        ),
-                        "objective_val": (
-                            rl_full_objective_val
-                            if rl_full_objective_val is not None
-                            else ""
-                        ),
-                        "total_successful_delivery": (
-                            rl_full_total_successful_delivery
-                            if rl_full_total_successful_delivery is not None
-                            else ""
-                        ),
-                        "avg_cost_per_successful_delivery": rl_full_avg_cost,
-                    }
-                )
-
-            # Row 2: RL reward components after partial charging.
-            iter_rows.append(
-                {
-                    "itr": itr,
-                    "method": "RL_partial_charging",
-                    "total_delivery": args.customer_num,
-                    "total_cp": args.charging_stations_num,
-                    "total_ev": args.ev_num,
-                    "delivery2ev_ratio": args.customer_num / args.ev_num,
-                    "elapsed_time_ms": (
-                        rl_inference_time_ms if rl_inference_time_ms is not None else ""
-                    ),
-                    "total_reward": rl_total_reward if rl_total_reward is not None else "",
-                    "total_cost": rl_total_cost if rl_total_cost is not None else "",
-                    "objective_val": rl_objective_val if rl_objective_val is not None else "",
-                    "total_successful_delivery": (
-                        rl_total_successful_delivery
-                        if rl_total_successful_delivery is not None
-                        else ""
-                    ),
-                    "avg_cost_per_successful_delivery": rl_avg_cost,
                 }
             )
 

@@ -1,6 +1,6 @@
-# Convoy Hybrid (RL4CO CVRPTW + CP Postprocessing)
+# m_VRPTW (RL4CO CVRPTW + CP Postprocessing)
 
-`convoy_hybrid` trains RL4CO CVRPTW on depot + customer nodes, then (for test CSV reporting) augments decoded routes with charging-point (CP) insertion and prints both:
+`m_VRPTW` trains RL4CO CVRPTW on depot + customer nodes, then (for test CSV reporting) augments decoded routes with charging-point (CP) insertion and prints both:
 
 - Full-charging reward components
 - Partial-charging reward components
@@ -10,7 +10,7 @@
 Run from `/home/akkcm/CONVOY2`:
 
 ```bash
-python tests/test_convoy_hybrid.py \
+python tests/test_m_VRPTW.py \
   --combined-details-csv data/combined_data_jd200_1.csv \
   --combined-dist-matrix-csv data/distance_matrix_jd200_1.csv \
   --combined-time-matrix-csv data/time_matrix_jd200_1.csv \
@@ -115,7 +115,7 @@ python tests/test_convoy_hybrid.py \
 
 ### Compatibility-Only Arguments In Hybrid
 
-| Argument | Behavior In `convoy_hybrid` |
+| Argument | Behavior In `m_VRPTW` |
 | --- | --- |
 | `--charging-stations-num` | Accepted for CLI compatibility, ignored in hybrid training. |
 | `--cost-weight` | Accepted for compatibility; hybrid RL training reward remains RL4CO CVRPTW reward. |

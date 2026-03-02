@@ -2,7 +2,7 @@
 
 This module provides:
 - top-level `convoy_main` argument parsing,
-- helper parsers/builders for RL and Opt+Heu sub-runners,
+- helper parsers/builders for RL-v2, hybrid, and Opt+Heu sub-runners,
 - pass-through handling for quoted extra argument groups.
 """
 
@@ -30,13 +30,6 @@ def _contains_flag(args, flag_name):
     return False
 
 
-def _build_rl_parser():
-    """Load and return the RL parser from `src.convoy_rl_partial_ch.myparser`."""
-    from src.convoy_rl_partial_ch.myparser import build_parser as build_rl_parser
-
-    return build_rl_parser()
-
-
 def _build_rl_v2_parser():
     """Load and return the RL-v2 parser from `src.convoy_rl_partial_ch2.myparser`."""
     from src.convoy_rl_partial_ch2.myparser import build_parser as build_rl_v2_parser
@@ -45,8 +38,8 @@ def _build_rl_v2_parser():
 
 
 def _build_hybrid_parser():
-    """Load and return the hybrid parser from `convoy_hybrid`."""
-    from convoy_hybrid.convoy_hybrid_parser import build_parser as build_hybrid_parser
+    """Load and return the hybrid parser from `m_VRPTW`."""
+    from m_VRPTW.convoy_hybrid_parser import build_parser as build_hybrid_parser
 
     return build_hybrid_parser()
 
@@ -80,15 +73,8 @@ def build_rl_cli_args(main_args, rl_extra_args, auto_test_csv=None):
 
 
 def parse_rl_direct_args(cli_args=None):
-    """Parse RL arguments directly (standalone RL invocation)."""
-    return _build_rl_parser().parse_args(cli_args)
-
-
-def parse_rl_args(main_args, rl_extra_args, auto_test_csv=None):
-    """Parse RL args synthesized from top-level args and pass-through extras."""
-    rl_cli_args = build_rl_cli_args(main_args, rl_extra_args, auto_test_csv=auto_test_csv)
-    rl_parser = _build_rl_parser()
-    return rl_parser.parse_args(rl_cli_args), rl_cli_args
+    """Backward-compatible alias for RL-v2 direct argument parsing."""
+    return _build_rl_v2_parser().parse_args(cli_args)
 
 
 def parse_rl_v2_direct_args(cli_args=None):
@@ -385,7 +371,7 @@ def build_main_parser():
         help=(
             "If set, delete RL checkpoint directories before running. "
             "By default uses --checkpoint-dir from --opt-rl-extra (or "
-            "CONVOY2/checkpoints_vrptw). If both hybrid and convoy RL stages run, "
+            "CONVOY2/checkpoints_vrptw). If both hybrid and convoy RL-v2 stages run, "
             "both stage checkpoint dirs are cleared."
         ),
     )
@@ -475,7 +461,10 @@ def build_main_parser():
     parser.add_argument(
         "--only-rl",
         action="store_true",
-        help="Run only RL launcher (skip optimal+heuristic).",
+        help=(
+            "Run only RL launchers: `m_VRPTW` and `convoy_rl_partial_ch2` "
+            "(skip optimal+heuristic)."
+        ),
     )
     parser.add_argument(
         "--only-opt-heu",
@@ -487,15 +476,7 @@ def build_main_parser():
         action="store_true",
         help=(
             "Run only `convoy_rl_partial_ch2` launcher "
-            "(skip optimal+heuristic, convoy_hybrid, and convoy_rl_partial_ch)."
-        ),
-    )
-    parser.add_argument(
-        "--skip-convoy-rl",
-        action="store_true",
-        help=(
-            "Skip `convoy_rl_partial_ch` stage while still allowing "
-            "`convoy_hybrid` (unless --only-opt-heu is set)."
+            "(skip optimal+heuristic and m_VRPTW)."
         ),
     )
     parser.add_argument(
@@ -503,19 +484,9 @@ def build_main_parser():
         type=str,
         default=None,
         help=(
-            "Override --checkpoint-dir only for convoy_hybrid stage. "
+            "Override --checkpoint-dir only for m_VRPTW stage. "
             "If set, takes precedence over --checkpoint-dir passed inside --opt-rl-extra "
             "for the hybrid runner."
-        ),
-    )
-    parser.add_argument(
-        "--rl-checkpoint-dir",
-        type=str,
-        default=None,
-        help=(
-            "Override --checkpoint-dir only for convoy_rl_partial_ch stage. "
-            "If set, takes precedence over --checkpoint-dir passed inside --opt-rl-extra "
-            "for the convoy RL runner."
         ),
     )
     parser.add_argument(

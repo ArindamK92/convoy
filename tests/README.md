@@ -12,16 +12,16 @@ cd /home/akkcm/CONVOY2
 
 ## Available Runners
 
-1. `tests/test_convoy_CPs1.py` -> convoy RL partial charging pipeline (`src/convoy_rl_partial_ch/convoy_rl_main.py`)
-2. `tests/test_convoy_hybrid.py` -> hybrid RL pipeline (`convoy_hybrid/convoy_hybrid_main.py`)
+1. `tests/test_convoy_CPs1_ch2.py` -> convoy RL partial charging pipeline (`src/convoy_rl_partial_ch2/convoy_rl_main.py`)
+2. `tests/test_m_VRPTW.py` -> m_VRPTW RL pipeline (`m_VRPTW/convoy_hybrid_main.py`)
 3. `tests/test_convoy_opt_and_heu.py` -> optimization + heuristic pipeline (`src/convoy_opt_and_heu/opt_and_hue.py`)
 
-## 1) `test_convoy_CPs1.py`
+## 1) `test_convoy_CPs1_ch2.py`
 
 Run:
 
 ```bash
-python tests/test_convoy_CPs1.py \
+python tests/test_convoy_CPs1_ch2.py \
   --combined-details-csv data/combined_data_jd200_1.csv \
   --combined-dist-matrix-csv data/distance_matrix_jd200_1.csv \
   --combined-time-matrix-csv data/time_matrix_jd200_1.csv \
@@ -42,12 +42,12 @@ Arguments:
 - Data/model settings: `--test-csv`, `--csv-vehicle-capacity`, `--ev-battery-capacity-kwh`, `--ev-energy-rate-kwh-per-distance`, `--cost-weight`, `--ev-charge-rate-kwh-per-hour`, `--reserve-battery` (alias `--ev-reserve-soc-kwh`), `--ev-num`, `--charging-stations-num`, `--combined-time-matrix-csv`, `--customer-num`, `--pool-vehicle-capacity`, `--test-distance-matrix-csv`, `--test-time-matrix-csv`
 - Output: `--print-solution`
 
-## 2) `test_convoy_hybrid.py`
+## 2) `test_m_VRPTW.py`
 
 Run:
 
 ```bash
-python tests/test_convoy_hybrid.py \
+python tests/test_m_VRPTW.py \
   --combined-details-csv data/combined_data_jd200_1.csv \
   --combined-dist-matrix-csv data/distance_matrix_jd200_1.csv \
   --combined-time-matrix-csv data/time_matrix_jd200_1.csv \
@@ -58,7 +58,7 @@ python tests/test_convoy_hybrid.py \
   --epochs 100 \
   --seed 111 \
   --save-model \
-  --checkpoint-dir checkpoints_vrptw/hybrid_c50_cp10_ev10_e100
+  --checkpoint-dir checkpoints_vrptw/m_VRPTW_c50_cp10_ev10_e100
 ```
 
 Required arguments:
@@ -66,7 +66,7 @@ Required arguments:
 - `--combined-dist-matrix-csv`
 
 Arguments:
-- All shared RL arguments from `test_convoy_CPs1.py` are accepted (same base parser).
+- All shared RL arguments from `test_convoy_CPs1_ch2.py` are accepted (same base parser).
 - Hybrid-specific additions:
   - `--fixed-instance-csv`
   - `--fixed-instance-seed`
@@ -112,7 +112,7 @@ Arguments:
 Use these to print full argument documentation directly from code:
 
 ```bash
-python tests/test_convoy_CPs1.py --help
-python tests/test_convoy_hybrid.py --help
+python tests/test_convoy_CPs1_ch2.py --help
+python tests/test_m_VRPTW.py --help
 python tests/test_convoy_opt_and_heu.py --help
 ```

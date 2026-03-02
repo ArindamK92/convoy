@@ -7,7 +7,7 @@ import torch
 from tensordict import TensorDict
 from rl4co.envs import CVRPTWEnv
 
-from src.convoy_rl_partial_ch.myparser import parse_customer, parse_distance_matrix_csv
+from src.convoy_rl_partial_ch2.myparser import parse_customer, parse_distance_matrix_csv
 
 
 def load_customers_only_instance_from_csv(
@@ -32,17 +32,6 @@ def load_customers_only_instance_from_csv(
     customer_ids_int = [int(cid) for cid in customer_ids]
     depot_id = int(depot.get("node_id", 0))
     all_nodes = [depot] + customers
-    cp_ids_int = [int(cp.get("cp_id")) for cp in charging_points if cp.get("cp_id") is not None]
-    cp_locs = [
-        [float(cp.get("x", 0.0)), float(cp.get("y", 0.0))]
-        for cp in charging_points
-        if cp.get("cp_id") is not None
-    ]
-    cp_rates = [
-        float(cp.get("charge_rate_kwh_per_hour", 120.0))
-        for cp in charging_points
-        if cp.get("cp_id") is not None
-    ]
 
     depot_xy = torch.tensor([[depot["x"], depot["y"]]], dtype=torch.float32, device=device)
     locs = torch.tensor(
@@ -81,25 +70,16 @@ def load_customers_only_instance_from_csv(
         "capacity": capacity,
         "global_node_ids": global_nodes,
     }
-    if cp_ids_int:
-        out["cp_global_ids"] = torch.tensor([cp_ids_int], dtype=torch.long, device=device)
-        out["cp_locs"] = torch.tensor([cp_locs], dtype=torch.float32, device=device)
-        out["cp_charge_rate_kwh_per_hour"] = torch.tensor(
-            [cp_rates], dtype=torch.float32, device=device
-        )
     if distance_matrix_csv is not None:
         dist_full = parse_distance_matrix_csv(distance_matrix_csv).to(device)
         idx_i = global_nodes[:, :, None].expand(-1, -1, global_nodes.shape[1])
         idx_j = global_nodes[:, None, :].expand(-1, global_nodes.shape[1], -1)
         out["dist_matrix"] = dist_full[idx_i, idx_j]
-        out["full_dist_matrix"] = dist_full.unsqueeze(0)
         if time_matrix_csv is not None:
             time_full = parse_distance_matrix_csv(time_matrix_csv).to(device)
             out["travel_time_matrix"] = time_full[idx_i, idx_j]
-            out["full_time_matrix"] = time_full.unsqueeze(0)
         else:
             out["travel_time_matrix"] = out["dist_matrix"]
-            out["full_time_matrix"] = dist_full.unsqueeze(0)
     return TensorDict(out, batch_size=[1]), len(charging_points)
 
 

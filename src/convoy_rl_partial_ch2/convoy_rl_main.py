@@ -136,6 +136,13 @@ def _format_decode_kwargs(decode_kwargs: dict) -> str:
     return ", ".join(parts)
 
 
+def _checkpoint_map_location(accelerator: str):
+    """Map CUDA checkpoints safely when GPU is unavailable or unused."""
+    if accelerator == "gpu" and torch.cuda.is_available():
+        return None
+    return torch.device("cpu")
+
+
 
 def run_rl(args) -> dict:
     """Train, evaluate, and optionally decode solutions for the configured CVRPTW run."""
@@ -148,6 +155,7 @@ def run_rl(args) -> dict:
         accelerator = "gpu" if torch.cuda.is_available() else "cpu"
     else:
         accelerator = args.accelerator
+    checkpoint_map_location = _checkpoint_map_location(accelerator)
 
     pool_csv_path = args.combined_details_csv
     train_dist_csv = args.combined_dist_matrix_csv
@@ -230,7 +238,10 @@ def run_rl(args) -> dict:
         best_ckpt_path = saved_best_ckpt_path
         print(f"Found saved best checkpoint: {saved_best_ckpt_path}. Skipping training.")
         model_for_solution = model_cls.load_from_checkpoint(
-            best_ckpt_path, env=env, weights_only=False
+            best_ckpt_path,
+            env=env,
+            weights_only=False,
+            map_location=checkpoint_map_location,
         )
         initial_fixed_reward = evaluate_policy_on_dataset(
             model_for_solution,
@@ -273,7 +284,10 @@ def run_rl(args) -> dict:
             print(f"Saved best checkpoint: {best_ckpt_path}")
 
         model_for_solution = model_cls.load_from_checkpoint(
-            best_ckpt_path, env=env, weights_only=False
+            best_ckpt_path,
+            env=env,
+            weights_only=False,
+            map_location=checkpoint_map_location,
         )
         best_ckpt_fixed_reward = evaluate_policy_on_dataset(
             model_for_solution,
@@ -464,9 +478,9 @@ def main() -> None:
 def rl_main(args=None) -> dict:
     """CLI wrapper that parses args then runs RL pipeline."""
     if args is None:
-        from convoy_parser import parse_rl_direct_args
+        from convoy_parser import parse_rl_v2_direct_args
 
-        args = parse_rl_direct_args()
+        args = parse_rl_v2_direct_args()
     return run_rl(args)
 
 

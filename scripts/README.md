@@ -20,8 +20,8 @@ Function:
 - Fixed `CP_NUM=20`, `EV = customer / 5`
 - Runs `convoy_main` with:
   - heuristic (`--skip-optimal`),
-  - `convoy_hybrid`,
-  - `convoy_rl_partial_ch`,
+  - `m_VRPTW`,
+  - `convoy_rl_partial_ch2`,
   - baseline.
 - Uses POMO + beam-search style RL args.
 - Clears checkpoint directory at start of each run (`--clear-rl-checkpoints`).
@@ -35,7 +35,7 @@ Function:
 - Runs heuristic + hybrid + RL + baseline.
 - Uses separate stage checkpoint dirs:
   - `--hybrid-checkpoint-dir`
-  - `--rl-checkpoint-dir`
+  - `--rl-v2-checkpoint-dir`
 - Does **not** clear checkpoints.
 
 Use when:
@@ -71,20 +71,20 @@ Function:
 - Same ratio sweep (`customer=50`, `CP=20`, ratio `5..10`).
 - Runs:
   - heuristic + NDF + EDF,
-  - hybrid only.
-- Skips convoy RL stage (`--skip-convoy-rl`) and baseline.
+  - hybrid,
+  - RL-v2.
+- Skips baseline.
 - Uses saved hybrid checkpoint dir via `--opt-rl-extra "--checkpoint-dir ..."` and POMO+beam params.
 
 Use when:
-- You want faster ratio sweeps focused on heuristic+hybrid only.
+- You want faster ratio sweeps focused on CONVOY methods without baseline.
 
 ### `run_small_methods_sweep.sh`
 Function:
 - Small-size cases:
-  - customers `5,10`: Optimal + Heuristic + Hybrid
-  - customer `15`: Heuristic + Hybrid (skip Optimal)
+  - customers `5,10`: Optimal + Heuristic + Hybrid + RL-v2
+  - customer `15`: Heuristic + Hybrid + RL-v2 (skip Optimal)
 - Uses fixed `CP_NUM=3`, `EV_NUM=2`.
-- Skips convoy RL (`--skip-convoy-rl`).
 - Disables NDF/EDF (`--no-edf-ndf`).
 
 Use when:
@@ -93,8 +93,8 @@ Use when:
 ### `run_large_cust_cp50_ev50_sweep.sh`
 Function:
 - Large-data workflow on `jd1000_2` files.
-- Step 1: pretrain/save `convoy_hybrid` checkpoint (`hybrid_c500_cp50_ev50_e200`).
-- Step 2: pretrain/save `convoy_rl_partial_ch` checkpoint (`rl_c500_cp50_ev50_e200`).
+- Step 1: pretrain/save `m_VRPTW` checkpoint (`hybrid_c500_cp50_ev50_e200`).
+- Step 2: pretrain/save `convoy_rl_partial_ch2` checkpoint (`rl_c500_cp50_ev50_e200`).
 - Step 3: sweep customers `200..1000` (step `200`), fixed `CP=50`, `EV=50`:
   - iterations `5` for `200/400/600/800`
   - iteration `1` for `1000`
@@ -107,4 +107,3 @@ Use when:
 ### `Experiments.md`
 Function:
 - Markdown runbook with curated command examples for common experiment flows.
-

@@ -150,11 +150,11 @@ python3 convoy_main.py   --combined-details-csv data/combined_data_jd200_1.csv  
 
 
 
-/home/akkcm/myenv/bin/python tests/test_convoy_hybrid.py   --combined-details-csv data/combined_data_jd200_1.csv   --combined-dist-matrix-csv data/distance_matrix_jd200_1.csv   --combined-time-matrix-csv data/time_matrix_jd200_1.csv   --test-csv data/test_instance.csv   --test-distance-matrix-csv data/distance_matrix_jd200_1.csv   --test-time-matrix-csv data/time_matrix_jd200_1.csv   --customer-num 20 --ev-num 8   --epochs 100   --fixed-eval-every 5   --seed 111   --print-solution
+/home/akkcm/myenv/bin/python tests/test_m_VRPTW.py   --combined-details-csv data/combined_data_jd200_1.csv   --combined-dist-matrix-csv data/distance_matrix_jd200_1.csv   --combined-time-matrix-csv data/time_matrix_jd200_1.csv   --test-csv data/test_instance.csv   --test-distance-matrix-csv data/distance_matrix_jd200_1.csv   --test-time-matrix-csv data/time_matrix_jd200_1.csv   --customer-num 20 --ev-num 8   --epochs 100   --fixed-eval-every 5   --seed 111   --print-solution
 
 
-Run convoy_hybrid only:
-/home/akkcm/myenv/bin/python tests/test_convoy_hybrid.py \
+Run m_VRPTW only:
+/home/akkcm/myenv/bin/python tests/test_m_VRPTW.py \
   --combined-details-csv data/combined_data_jd200_1.csv \
   --combined-dist-matrix-csv data/distance_matrix_jd200_1.csv \
   --combined-time-matrix-csv data/time_matrix_jd200_1.csv \
@@ -171,7 +171,7 @@ Run convoy_hybrid only:
 
 ****Save checkpoint in a dir and use it later*****
 ** Convoy_hybrid: decoder type greedy, RL algo am**
-   /home/akkcm/myenv/bin/python tests/test_convoy_hybrid.py \
+   /home/akkcm/myenv/bin/python tests/test_m_VRPTW.py \
   --combined-details-csv data/combined_data_jd200_1.csv \
   --combined-dist-matrix-csv data/distance_matrix_jd200_1.csv \
   --combined-time-matrix-csv data/time_matrix_jd200_1.csv \
@@ -188,7 +188,7 @@ Run convoy_hybrid only:
 
 
   **Convoy_hybrid: using POMO and decoder beam search:**
-  /home/akkcm/myenv/bin/python tests/test_convoy_hybrid.py \
+  /home/akkcm/myenv/bin/python tests/test_m_VRPTW.py \
   --combined-details-csv data/combined_data_jd200_1.csv \
   --combined-dist-matrix-csv data/distance_matrix_jd200_1.csv \
   --combined-time-matrix-csv data/time_matrix_jd200_1.csv \
@@ -208,7 +208,7 @@ Run convoy_hybrid only:
   --checkpoint-dir checkpoints_vrptw/hybrid_c50_cp10_ev10_e100_POMO
 
 **convoy_rl_partial**
-/home/akkcm/myenv/bin/python -m src.convoy_rl_partial_ch.convoy_rl_main \
+/home/akkcm/myenv/bin/python -m src.convoy_rl_partial_ch2.convoy_rl_main \
   --combined-details-csv data/combined_data_jd200_1.csv \
   --combined-dist-matrix-csv data/distance_matrix_jd200_1.csv \
   --combined-time-matrix-csv data/time_matrix_jd200_1.csv \
@@ -223,10 +223,10 @@ Run convoy_hybrid only:
   --seed 111 \
   --print-solution \
   --save-model \
-  --checkpoint-dir checkpoints_vrptw/rl_partial_c50_cp10_ev10_e100
+  --checkpoint-dir checkpoints_vrptw/rl_partial_ch2_c50_cp10_ev10_e100
 
 
-**use different dir for convoy_rl_partyial_ch and convoy_hybrid
+**use different dir for convoy_rl_partyial_ch and m_VRPTW
 /home/akkcm/myenv/bin/python /home/akkcm/CONVOY2/convoy_main.py \
   --combined-details-csv data/combined_data_jd200_1.csv \
   --combined-dist-matrix-csv data/distance_matrix_jd200_1.csv \
@@ -234,7 +234,7 @@ Run convoy_hybrid only:
   --customer-num 50 --charging-stations-num 10 --ev-num 10 \
   --epochs 100 --fixed-eval-every 5 --seed 111 \
   --opt-rl-extra "--save-model" \
-  --rl-checkpoint-dir checkpoints_vrptw/rl_partial_c50_cp10_ev10_e100 \
+  --rl-v2-checkpoint-dir checkpoints_vrptw/rl_partial_ch2_c50_cp10_ev10_e100 \
   --hybrid-checkpoint-dir checkpoints_vrptw/hybrid_c50_cp10_ev10_e100
 
 
@@ -257,7 +257,7 @@ Run heuristic CSA, EDF, NDF
 
  
 Test on the same file:
-/home/akkcm/myenv/bin/python tests/test_convoy_hybrid.py   --combined-details-csv data/combined_data_jd200_1.csv   --combined-dist-matrix-csv data/distance_matrix_jd200_1.csv   --combined-time-matrix-csv data/time_matrix_jd200_1.csv   --test-csv data/test_instance_5c_3cp.csv   --customer-num 50   --charging-stations-num 10   --ev-num 10   --epochs 100   --fixed-eval-every 5   --seed 111   --print-solution   --save-model   --checkpoint-dir checkpoints_vrptw/hybrid_c50_cp10_ev10_e100
+/home/akkcm/myenv/bin/python tests/test_m_VRPTW.py   --combined-details-csv data/combined_data_jd200_1.csv   --combined-dist-matrix-csv data/distance_matrix_jd200_1.csv   --combined-time-matrix-csv data/time_matrix_jd200_1.csv   --test-csv data/test_instance_5c_3cp.csv   --customer-num 50   --charging-stations-num 10   --ev-num 10   --epochs 100   --fixed-eval-every 5   --seed 111   --print-solution   --save-model   --checkpoint-dir checkpoints_vrptw/hybrid_c50_cp10_ev10_e100
 
 /home/akkcm/myenv/bin/python -m src.convoy_opt_and_heu.opt_and_hue   --combined-details-csv data/combined_data_jd200_1.csv   --combined-dist-matrix-csv data/distance_matrix_jd200_1.csv   --combined-time-matrix-csv data/time_matrix_jd200_1.csv   --test-for-opt-heu data/test_instance_5c_3cp.csv   --customer-num 5   --charging-stations-num 3   --ev-num 2   --skip-optimal   --no-edf-ndf
 
@@ -304,3 +304,10 @@ new model:
   --save-model \
   --checkpoint-dir checkpoints_vrptw/rl_partial_ch2_c50_cp10_ev10_e100_pomo
  
+
+
+
+Self Note:
+rsync -av --delete \
+  --exclude='.git/' \
+  /home/akkcm/CONVOY2/ /home/akkcm/CONVOY/

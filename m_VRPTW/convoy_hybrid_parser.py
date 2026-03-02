@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import argparse
 
-from src.convoy_rl_partial_ch.myparser import build_parser as build_base_parser
+from src.convoy_rl_partial_ch2.myparser import build_parser as build_base_parser
 
 
 def _set_option_help(parser, option: str, text: str) -> None:
@@ -29,13 +29,13 @@ def _parse_bool(value):
 
 
 def build_parser():
-    """Build hybrid parser compatible with convoy_rl_partial_ch CLI."""
+    """Build hybrid parser compatible with RL-v2 CLI."""
     parser = build_base_parser()
     parser.description = (
         "Train/test hybrid RL4CO CVRPTW (customers+depot only) on fixed train/val instance."
     )
 
-    # Clarify hybrid behavior while keeping CLI compatibility with convoy_rl_partial_ch.
+    # Clarify hybrid behavior while keeping CLI compatibility with RL-v2.
     _set_option_help(
         parser,
         "--test-csv",

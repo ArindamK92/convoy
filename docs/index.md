@@ -11,8 +11,8 @@ This site documents the combined RL + optimal/heuristic pipeline in `CONVOY2`.
 
 ## Main Entry Points
 - Combined runner: `convoy_main.py`
-- RL-only test launcher: `tests/test_convoy_CPs1.py`
-- Hybrid test launcher: `tests/test_convoy_hybrid.py`
+- RL-only test launcher: `tests/test_convoy_CPs1_ch2.py`
+- Hybrid test launcher: `tests/test_m_VRPTW.py`
 - Opt+Heu-only test launcher: `tests/test_convoy_opt_and_heu.py`
 
 ## Start Here

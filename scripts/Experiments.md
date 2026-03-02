@@ -2,10 +2,10 @@
 Run this first to train and store the model checkpoint. Then use it in the scripts below.
 
 ### Step 1: Save checkpoint in a directory and reuse later
-`convoy_hybrid`: decoder type `greedy`, RL algo `am`
+`m_VRPTW`: decoder type `greedy`, RL algo `am`
 
 ```bash
-/home/akkcm/myenv/bin/python tests/test_convoy_hybrid.py \
+/home/akkcm/myenv/bin/python tests/test_m_VRPTW.py \
   --combined-details-csv data/combined_data_jd200_1.csv \
   --combined-dist-matrix-csv data/distance_matrix_jd200_1.csv \
   --combined-time-matrix-csv data/time_matrix_jd200_1.csv \

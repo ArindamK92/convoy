@@ -11,7 +11,7 @@ set -euo pipefail
 # - NDF
 # - EDF
 # - Baseline
-# (Optimal, convoy_hybrid, convoy_rl_partial_ch are skipped.)
+# (Optimal, m_VRPTW, convoy_rl_partial_ch2 are skipped.)
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"

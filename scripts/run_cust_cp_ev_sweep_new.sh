@@ -31,7 +31,7 @@ BASELINE_TIME="${BASELINE_TIME:-630}"
 BASELINE_RUNS="${BASELINE_RUNS:-2}"
 
 HYBRID_CHECKPOINT_DIR="${HYBRID_CHECKPOINT_DIR:-checkpoints_vrptw/hybrid_c50_cp10_ev10_e100}"
-RL_CHECKPOINT_DIR="${RL_CHECKPOINT_DIR:-checkpoints_vrptw/rl_partial_c50_cp10_ev10_e100}"
+RL_CHECKPOINT_DIR="${RL_CHECKPOINT_DIR:-checkpoints_vrptw/rl_partial_ch2_c50_cp10_ev10_e100}"
 
 RL_EXTRA="--print-solution --save-model --seed ${SEED} --epochs ${EPOCHS} --rl-algo pomo --baseline shared --pomo-num-starts 10 --pomo-num-augment 8 --decode-type beam_search --decode-beam-width 10"
 OPT_HEU_EXTRA="--random-seed ${SEED} --skip-optimal"
@@ -70,7 +70,7 @@ for cust_num in $(seq "${CUST_START}" "${CUST_STEP}" "${CUST_END}"); do
     "--opt-rl-extra" "${RL_EXTRA}"
     "--opt-heu-extra" "${OPT_HEU_EXTRA}"
     "--hybrid-checkpoint-dir" "${HYBRID_CHECKPOINT_DIR}"
-    "--rl-checkpoint-dir" "${RL_CHECKPOINT_DIR}"
+    "--rl-v2-checkpoint-dir" "${RL_CHECKPOINT_DIR}"
   )
 
   echo

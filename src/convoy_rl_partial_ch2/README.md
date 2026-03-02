@@ -1,6 +1,6 @@
-# Convoy RL Partial Charging (`convoy_rl_partial_ch`)
+# Convoy RL Partial Charging (`convoy_rl_partial_ch2`)
 
-`convoy_rl_partial_ch` trains a modified RL4CO CVRPTW model and evaluates on a test instance with reward decomposition:
+`convoy_rl_partial_ch2` trains a modified RL4CO CVRPTW model and evaluates on a test instance with reward decomposition:
 - before partial charging (full-charge style),
 - after partial charging.
 
@@ -36,7 +36,7 @@ Total RL reward is:
 Run from repo root (`/home/akkcm/CONVOY2`) using the test shim:
 
 ```bash
-python tests/test_convoy_CPs1.py \
+python tests/test_convoy_CPs1_ch2.py \
   --combined-details-csv data/combined_data_jd200_1.csv \
   --combined-dist-matrix-csv data/distance_matrix_jd200_1.csv \
   --combined-time-matrix-csv data/time_matrix_jd200_1.csv \
@@ -49,7 +49,7 @@ python tests/test_convoy_CPs1.py \
   --seed 111 \
   --print-solution \
   --save-model \
-  --checkpoint-dir checkpoints_vrptw/rl_partial_c50_cp10_ev10_e100
+  --checkpoint-dir checkpoints_vrptw/rl_partial_ch2_c50_cp10_ev10_e100
 ```
 
 Alternative (module form):
@@ -140,5 +140,5 @@ Matrix fallback for `--test-csv`:
 ## Help Command
 
 ```bash
-python tests/test_convoy_CPs1.py --help
+python tests/test_convoy_CPs1_ch2.py --help
 ```

@@ -1,6 +1,6 @@
-# RL Test Runner (`tests/test_convoy_CPs1.py`)
+# RL Test Runner (`tests/test_convoy_CPs1_ch2.py`)
 
-Shim for `src/convoy_rl_partial_ch/convoy_rl_main.py`.
+Shim for `src/convoy_rl_partial_ch2/convoy_rl_main.py`.
 
 ## Purpose
 - Train RL4CO CVRPTW with CONVOY partial-charging reward.
@@ -30,7 +30,7 @@ Shim for `src/convoy_rl_partial_ch/convoy_rl_main.py`.
 ### 1) Basic Run
 
 ```bash
-python tests/test_convoy_CPs1.py \
+python tests/test_convoy_CPs1_ch2.py \
   --combined-details-csv data/combined_data_jd200_1.csv \
   --combined-dist-matrix-csv data/distance_matrix_jd200_1.csv \
   --combined-time-matrix-csv data/time_matrix_jd200_1.csv \
@@ -42,7 +42,7 @@ python tests/test_convoy_CPs1.py \
 ### 2) Run With Test CSV + Checkpoint Save
 
 ```bash
-python tests/test_convoy_CPs1.py \
+python tests/test_convoy_CPs1_ch2.py \
   --combined-details-csv data/combined_data_jd200_1.csv \
   --combined-dist-matrix-csv data/distance_matrix_jd200_1.csv \
   --combined-time-matrix-csv data/time_matrix_jd200_1.csv \
@@ -56,14 +56,14 @@ python tests/test_convoy_CPs1.py \
   --fixed-eval-every 5 \
   --seed 111 \
   --save-model \
-  --checkpoint-dir checkpoints_vrptw/rl_partial_c50_cp10_ev10_e100 \
+  --checkpoint-dir checkpoints_vrptw/rl_partial_ch2_c50_cp10_ev10_e100 \
   --print-solution
 ```
 
 ### 3) POMO Run
 
 ```bash
-python tests/test_convoy_CPs1.py \
+python tests/test_convoy_CPs1_ch2.py \
   --combined-details-csv data/combined_data_jd200_1.csv \
   --combined-dist-matrix-csv data/distance_matrix_jd200_1.csv \
   --combined-time-matrix-csv data/time_matrix_jd200_1.csv \

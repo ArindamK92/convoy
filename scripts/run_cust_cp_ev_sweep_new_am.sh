@@ -7,8 +7,8 @@ set -euo pipefail
 # - ev-num: customer-num / 5
 #
 # Flow:
-# 1) Pretrain + save convoy_hybrid checkpoint (AM + greedy).
-# 2) Pretrain + save convoy_rl_partial_ch checkpoint (AM + greedy).
+# 1) Pretrain + save m_VRPTW checkpoint (AM + greedy).
+# 2) Pretrain + save convoy_rl_partial_ch2 checkpoint (AM + greedy).
 # 3) Run customer sweep via convoy_main using saved checkpoints (no POMO/beam).
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -37,7 +37,7 @@ BASELINE_TIME="${BASELINE_TIME:-630}"
 BASELINE_RUNS="${BASELINE_RUNS:-2}"
 
 HYBRID_CHECKPOINT_DIR="${HYBRID_CHECKPOINT_DIR:-checkpoints_vrptw/hybrid_c50_cp10_ev10_e100_am}"
-RL_CHECKPOINT_DIR="${RL_CHECKPOINT_DIR:-checkpoints_vrptw/rl_partial_c50_cp10_ev10_e100_am}"
+RL_CHECKPOINT_DIR="${RL_CHECKPOINT_DIR:-checkpoints_vrptw/rl_partial_ch2_c50_cp10_ev10_e100_am}"
 
 PRETRAIN_TEST_CSV="${PRETRAIN_TEST_CSV:-data/test_instance_50c_10cp.csv}"
 PRETRAIN_CUSTOMER_NUM="${PRETRAIN_CUSTOMER_NUM:-50}"
@@ -57,13 +57,13 @@ echo "Combined time matrix: ${COMBINED_TIME_MATRIX_CSV}"
 echo "Sweep: customers=${CUST_START}..${CUST_END} step=${CUST_STEP}, cp=${CP_NUM}, ratio=${DELIVERY_TO_EV_RATIO}"
 
 echo
-echo "=== Step 1: Pretrain + save convoy_hybrid checkpoint (AM + greedy) ==="
+echo "=== Step 1: Pretrain + save m_VRPTW checkpoint (AM + greedy) ==="
 hybrid_best_ckpt="${HYBRID_CHECKPOINT_DIR}/best_model_hybrid.ckpt"
 if [[ -f "${hybrid_best_ckpt}" ]]; then
   echo "[SKIP] Found existing hybrid checkpoint: ${hybrid_best_ckpt}"
 else
   cmd_hybrid=(
-    "${PYTHON_BIN}" "tests/test_convoy_hybrid.py"
+    "${PYTHON_BIN}" "tests/test_m_VRPTW.py"
     "--combined-details-csv" "${COMBINED_DETAILS_CSV}"
     "--combined-dist-matrix-csv" "${COMBINED_DIST_MATRIX_CSV}"
     "--combined-time-matrix-csv" "${COMBINED_TIME_MATRIX_CSV}"
@@ -86,13 +86,13 @@ else
 fi
 
 echo
-echo "=== Step 2: Pretrain + save convoy_rl_partial_ch checkpoint (AM + greedy) ==="
+echo "=== Step 2: Pretrain + save convoy_rl_partial_ch2 checkpoint (AM + greedy) ==="
 rl_best_ckpt="${RL_CHECKPOINT_DIR}/best_model.ckpt"
 if [[ -f "${rl_best_ckpt}" ]]; then
   echo "[SKIP] Found existing RL checkpoint: ${rl_best_ckpt}"
 else
   cmd_rl=(
-    "${PYTHON_BIN}" "-m" "src.convoy_rl_partial_ch.convoy_rl_main"
+    "${PYTHON_BIN}" "-m" "src.convoy_rl_partial_ch2.convoy_rl_main"
     "--combined-details-csv" "${COMBINED_DETAILS_CSV}"
     "--combined-dist-matrix-csv" "${COMBINED_DIST_MATRIX_CSV}"
     "--combined-time-matrix-csv" "${COMBINED_TIME_MATRIX_CSV}"
@@ -146,7 +146,7 @@ for cust_num in $(seq "${CUST_START}" "${CUST_STEP}" "${CUST_END}"); do
     "--opt-rl-extra" "${RL_EXTRA}"
     "--opt-heu-extra" "${OPT_HEU_EXTRA}"
     "--hybrid-checkpoint-dir" "${HYBRID_CHECKPOINT_DIR}"
-    "--rl-checkpoint-dir" "${RL_CHECKPOINT_DIR}"
+    "--rl-v2-checkpoint-dir" "${RL_CHECKPOINT_DIR}"
   )
 
   echo

@@ -9,8 +9,9 @@ set -euo pipefail
 #
 # Methods run via convoy_main:
 # - Heuristic + NDF + EDF (Optimal skipped)
-# - convoy_hybrid
-# (convoy_rl_partial_ch and baseline are skipped)
+# - m_VRPTW
+# - convoy_rl_partial_ch2
+# (baseline is skipped)
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
@@ -33,6 +34,7 @@ ITERATIONS="${ITERATIONS:-15}"
 COST_WEIGHT="${COST_WEIGHT:-1.0}"
 
 HYBRID_CHECKPOINT_DIR="${HYBRID_CHECKPOINT_DIR:-checkpoints_vrptw/hybrid_c50_cp10_ev10_e100}"
+RL_V2_CHECKPOINT_DIR="${RL_V2_CHECKPOINT_DIR:-checkpoints_vrptw/rl_partial_ch2_c50_cp10_ev10_e100_pomo}"
 RL_EXTRA="--print-solution --save-model --checkpoint-dir ${HYBRID_CHECKPOINT_DIR} --seed ${SEED} --epochs ${EPOCHS} --rl-algo pomo --baseline shared --pomo-num-starts 10 --pomo-num-augment 8 --decode-type beam_search --decode-beam-width 10"
 OPT_HEU_EXTRA="--random-seed ${SEED} --skip-optimal"
 
@@ -65,9 +67,9 @@ for ratio in $(seq "${RATIO_START}" "${RATIO_END}"); do
     "--cost-weight" "${COST_WEIGHT}"
     "--iterations" "${ITERATIONS}"
     "--results-file" "${results_file}"
-    "--skip-convoy-rl"
     "--opt-rl-extra" "${RL_EXTRA}"
     "--opt-heu-extra" "${OPT_HEU_EXTRA}"
+    "--rl-v2-checkpoint-dir" "${RL_V2_CHECKPOINT_DIR}"
   )
 
   echo
